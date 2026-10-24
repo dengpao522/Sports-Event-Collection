@@ -14,7 +14,8 @@
     "seed:nanjing": "tsx scripts/seed-nanjing.ts",
     "seed:suzhou": "tsx scripts/seed-suzhou.ts",
     "seed:wuxi": "tsx scripts/seed-wuxi.ts",
-    "seed:ningbo": "tsx scripts/seed-ningbo.ts"
+    "seed:ningbo": "tsx scripts/seed-ningbo.ts",
+    "seed:cities": "tsx scripts/seed-cities.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

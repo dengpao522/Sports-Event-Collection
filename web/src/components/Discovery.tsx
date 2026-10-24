@@ -90,13 +90,15 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
             {c}
           </button>
         ))}
-        {/* 江浙沪更多城市：折叠展示，点击城市名订阅开通提醒 */}
-        <button
-          onClick={() => setSoonOpen((v) => !v)}
-          className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-400 hover:border-brand-300 hover:text-brand-600"
-        >
-          {soonOpen ? '收起' : `江浙沪更多城市（${SOON_CITIES.length} 城即将开通）▾`}
-        </button>
+        {/* 江浙沪更多城市：仅当存在待开通城市时展示（当前已全覆盖） */}
+        {SOON_CITIES.length > 0 && (
+          <button
+            onClick={() => setSoonOpen((v) => !v)}
+            className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-400 hover:border-brand-300 hover:text-brand-600"
+          >
+            {soonOpen ? '收起' : `江浙沪更多城市（${SOON_CITIES.length} 城即将开通）▾`}
+          </button>
+        )}
       </div>
       {soonOpen && (
         <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
