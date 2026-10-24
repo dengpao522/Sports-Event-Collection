@@ -11,7 +11,8 @@
     "db:studio": "prisma studio",
     "import": "tsx scripts/import-xlsx.ts",
     "notify": "tsx scripts/notify.ts",
-    "seed:nanjing": "tsx scripts/seed-nanjing.ts"
+    "seed:nanjing": "tsx scripts/seed-nanjing.ts",
+    "seed:suzhou": "tsx scripts/seed-suzhou.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

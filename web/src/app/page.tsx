@@ -52,7 +52,7 @@ export default async function HomePage() {
           <p className="mt-2 max-w-2xl text-sm leading-7 text-gray-600">
             赛事信息散落在各个公众号、小程序和官网？我们把江浙沪大众可报名的运动赛事聚到一处，
             按城市和运动品类筛选，报名开启与截止前邮件提醒你，不再错过报名窗口。
-            首站上海、杭州、南京已上线，江浙沪更多城市陆续开通中。
+            首站上海、杭州、南京、苏州已上线，江浙沪更多城市陆续开通中。
           </p>
           <div className="mt-4 flex gap-5 text-sm font-semibold text-brand-700">
             <span>{cityCount} 个城市</span>
