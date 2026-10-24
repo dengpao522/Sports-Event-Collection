@@ -31,6 +31,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin/import" className="rounded-md px-3 py-1.5 hover:bg-brand-50 hover:text-brand-700">
                 导入清单
               </Link>
+              <Link href="/admin/gaps" className="rounded-md px-3 py-1.5 hover:bg-brand-50 hover:text-brand-700">
+                空窗说明
+              </Link>
               <Link
                 href="/admin/submissions"
                 className="rounded-md px-3 py-1.5 hover:bg-brand-50 hover:text-brand-700"

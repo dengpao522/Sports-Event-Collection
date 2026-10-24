@@ -1,9 +1,14 @@
 /**
  * 邮件发送抽象层
  * ---------------------------------------------------------------
- * MVP 开发期 MAIL_PROVIDER=mock：不真实发信，只在服务端控制台打印，
- *   便于端到端验证订阅流程而无需配置密钥。
- * 正式期：实现 resend / smtp 分支（T4 选型后补充），调用方无需改动。
+ * MAIL_PROVIDER 三种取值：
+ *  - mock（默认）：不真实发信，只在服务端控制台打印，便于开发验证
+ *  - resend：调用 Resend HTTP API 真实发信（需配置 RESEND_API_KEY，
+ *    免费档每月 3000 封/每天 100 封，个人站起步足够）
+ *  - smtp：预留（T4 选型后补充）
+ *
+ * 防呆：provider=resend 但未配置密钥时自动降级为 mock 并告警，
+ * 避免提醒任务在未配置完成时整批失败。
  */
 
 export interface MailPayload {
@@ -13,22 +18,58 @@ export interface MailPayload {
   text: string;
 }
 
+/** mock 输出：控制台打印模拟邮件 */
+function logMock(payload: MailPayload, reason?: string): void {
+  console.log(`\n📧 [MOCK MAIL]${reason ? `（${reason}）` : ''}未真实发送，内容如下：`);
+  console.log('─'.repeat(60));
+  console.log('收件人:', payload.to);
+  console.log('主题:', payload.subject);
+  console.log('正文(text):\n', payload.text);
+  console.log('─'.repeat(60), '\n');
+}
+
+/** Resend HTTP API 发信（零依赖，fetch 直调） */
+async function sendViaResend(payload: MailPayload): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.MAIL_FROM;
+  if (!apiKey || !from) {
+    logMock(payload, 'RESEND_API_KEY 或 MAIL_FROM 未配置，自动降级 mock');
+    return;
+  }
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: [payload.to],
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+    }),
+  });
+  if (!resp.ok) {
+    const detail = await resp.text();
+    throw new Error(`Resend 发信失败（HTTP ${resp.status}）: ${detail.slice(0, 300)}`);
+  }
+}
+
 export async function sendMail(payload: MailPayload): Promise<void> {
   const provider = process.env.MAIL_PROVIDER ?? 'mock';
 
-  if (provider === 'mock') {
-    // 控制台输出模拟邮件（含确认/退订链接）
-    console.log('\n📧 [MOCK MAIL] 未真实发送，内容如下：');
-    console.log('─'.repeat(60));
-    console.log('收件人:', payload.to);
-    console.log('主题:', payload.subject);
-    console.log('正文(text):\n', payload.text);
-    console.log('─'.repeat(60), '\n');
+  if (provider === 'resend') {
+    await sendViaResend(payload);
     return;
   }
 
-  // 预留：provider === 'resend' / 'smtp' 时在此实现
-  throw new Error(`邮件服务商 "${provider}" 尚未配置，请使用 MAIL_PROVIDER=mock 或补充实现`);
+  if (provider === 'smtp') {
+    // 预留：T4 选型后实现（如 nodemailer）
+    throw new Error('SMTP 发信尚未实现，请使用 MAIL_PROVIDER=resend 或 mock');
+  }
+
+  logMock(payload);
 }
 
 /** 生成订阅确认邮件内容 */

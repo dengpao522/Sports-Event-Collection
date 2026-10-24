@@ -12,7 +12,7 @@ import { prisma } from '@/lib/prisma';
 import { ADMIN_COOKIE, requireAdmin, sessionTokenFor } from '@/lib/auth';
 import { parseDeadline, parseRaceDate } from '@/lib/parse-date';
 import { importWorkbook } from '@/lib/import-events';
-import { CITIES } from '@/lib/constants';
+import { CATEGORIES, CITIES } from '@/lib/constants';
 
 /** 登录：校验 ADMIN_PASSWORD，写 7 天会话 Cookie */
 export async function loginAction(formData: FormData) {
@@ -182,4 +182,41 @@ export async function importSheetAction(formData: FormData) {
     skipped: String(r.skipped),
   });
   redirect(`/admin/import?${q.toString()}`);
+}
+
+/** 保存品类空窗说明（新增或更新，城市+品类唯一） */
+export async function saveGapAction(formData: FormData) {
+  await requireAdmin();
+  const city = String(formData.get('city') ?? '');
+  const category = String(formData.get('category') ?? '');
+  const reason = String(formData.get('reason') ?? '').trim();
+  const seasonNote = String(formData.get('seasonNote') ?? '').trim();
+
+  // 城市与品类必须来自白名单（品类含“全部”=城市级通用说明）
+  const validCategory = category === '全部' || CATEGORIES.some((c) => c.key === category);
+  if (!CITIES.includes(city as (typeof CITIES)[number]) || !validCategory || !reason) {
+    redirect(`/admin/gaps?error=${encodeURIComponent('请完整选择城市与品类，并填写空窗原因')}`);
+  }
+
+  await prisma.gapReason.upsert({
+    where: { city_category: { city, category } },
+    update: { reason, seasonNote },
+    create: { city, category, reason, seasonNote },
+  });
+
+  revalidatePath('/');
+  revalidatePath('/admin/gaps');
+  redirect('/admin/gaps?saved=1');
+}
+
+/** 删除品类空窗说明（该城市×品类前台恢复为默认空窗文案） */
+export async function deleteGapAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('id') ?? '');
+  if (id) {
+    await prisma.gapReason.delete({ where: { id } });
+  }
+  revalidatePath('/');
+  revalidatePath('/admin/gaps');
+  redirect('/admin/gaps?deleted=1');
 }
