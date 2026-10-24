@@ -28,6 +28,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin/events" className="rounded-md px-3 py-1.5 hover:bg-brand-50 hover:text-brand-700">
                 赛事管理
               </Link>
+              <Link href="/admin/import" className="rounded-md px-3 py-1.5 hover:bg-brand-50 hover:text-brand-700">
+                导入清单
+              </Link>
               <Link
                 href="/admin/submissions"
                 className="rounded-md px-3 py-1.5 hover:bg-brand-50 hover:text-brand-700"

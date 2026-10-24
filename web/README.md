@@ -42,7 +42,7 @@ npm run dev
 | `npm run lint` | ESLint 检查 |
 | `npm run db:push` | 按 `prisma/schema.prisma` 同步本地数据库 |
 | `npm run db:studio` | 打开 Prisma Studio 查看/编辑数据 |
-| `npm run import` | 从上级目录 `../赛事清单/*.xlsx` 导入赛事与品类空窗说明 |
+| `npm run import` | 从上级目录 `../赛事清单/*.xlsx` 导入赛事与品类空窗说明（也可在后台 `/admin/import` 页上传 xlsx 导入，逻辑相同） |
 | `npm run notify` | 手动执行一轮订阅提醒扫描（也可交给系统计划任务调度） |
 
 ## 订阅提醒（定时任务）

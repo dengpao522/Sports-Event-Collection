@@ -11,6 +11,8 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { ADMIN_COOKIE, requireAdmin, sessionTokenFor } from '@/lib/auth';
 import { parseDeadline, parseRaceDate } from '@/lib/parse-date';
+import { importWorkbook } from '@/lib/import-events';
+import { CITIES } from '@/lib/constants';
 
 /** 登录：校验 ADMIN_PASSWORD，写 7 天会话 Cookie */
 export async function loginAction(formData: FormData) {
@@ -136,4 +138,48 @@ export async function reviewSubmissionAction(formData: FormData) {
   }
   revalidatePath('/admin/submissions');
   revalidatePath('/admin');
+}
+
+/**
+ * 后台上传 xlsx 导入清单（与命令行 npm run import 同一套解析逻辑，幂等）
+ * 成功后 redirect 到导入页并在 URL 上带统计参数展示报告
+ */
+export async function importSheetAction(formData: FormData) {
+  await requireAdmin();
+  const city = String(formData.get('city') ?? '');
+  const file = formData.get('file');
+
+  // 服务端校验：城市合法 + 文件为 xlsx
+  if (!CITIES.includes(city as (typeof CITIES)[number])) {
+    redirect(`/admin/import?error=${encodeURIComponent('请选择清单归属城市')}`);
+  }
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`/admin/import?error=${encodeURIComponent('请选择要上传的 .xlsx 文件')}`);
+  }
+  if (!/\.xlsx$/i.test(file.name)) {
+    redirect(`/admin/import?error=${encodeURIComponent('仅支持 .xlsx 格式（Excel 另存为“工作簿”）')}`);
+  }
+
+  const buffer = await file.arrayBuffer();
+  // 解析失败（伪造/损坏的 xlsx）给出友好提示，不让服务端 500
+  let r;
+  try {
+    r = await importWorkbook(city, buffer);
+  } catch {
+    redirect(`/admin/import?error=${encodeURIComponent('文件解析失败：请确认是有效的 .xlsx 工作簿（Excel 另存为 → 工作簿）')}`);
+  }
+
+  revalidatePath('/');
+  revalidatePath('/admin');
+  revalidatePath('/admin/events');
+
+  const q = new URLSearchParams({
+    done: '1',
+    city,
+    inserted: String(r.inserted),
+    updated: String(r.updated),
+    gap: String(r.gap),
+    skipped: String(r.skipped),
+  });
+  redirect(`/admin/import?${q.toString()}`);
 }
