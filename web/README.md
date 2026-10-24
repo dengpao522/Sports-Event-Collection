@@ -43,6 +43,24 @@ npm run dev
 | `npm run db:push` | 按 `prisma/schema.prisma` 同步本地数据库 |
 | `npm run db:studio` | 打开 Prisma Studio 查看/编辑数据 |
 | `npm run import` | 从上级目录 `../赛事清单/*.xlsx` 导入赛事与品类空窗说明 |
+| `npm run notify` | 手动执行一轮订阅提醒扫描（也可交给系统计划任务调度） |
+
+## 订阅提醒（定时任务）
+
+三类提醒，仅发给已完成邮箱确认（confirmed）的订阅，`notifiedAt` 防止重复发送：
+
+| 类型 | 触发条件 | 说明 |
+| --- | --- | --- |
+| 截止提醒（24H/72H） | 报名截止前 72 小时与 24 小时各提醒一次 | 仅限报名中/报满即止且有精确截止时间的赛事 |
+| 开报名提醒 | 关注的赛事状态变为「报名中」 | 每条订阅只发一次，错过窗口不补发 |
+| 新赛上架提醒 | 订阅的城市×品类有新赛事入库 | 以 `notifiedAt` 为水位，新订阅只看最近 24 小时 |
+
+调度方式二选一：
+
+1. **内置调度**：`npm run dev` / `npm start` 启动服务时自动运行（`src/instrumentation.ts` → 每小时扫描一轮），设 `NOTIFY_ENABLED=0` 可关闭；
+2. **外部调度**：不常驻服务时，用 Windows 计划任务 / cron 定时执行 `npm run notify`。
+
+开发期 `MAIL_PROVIDER=mock`，提醒内容仅打印到服务端控制台，不真实发信。
 
 ## 目录说明
 
@@ -55,7 +73,14 @@ prisma/
   schema.prisma        数据模型（Event / Subscription / Submission / GapReason）
 scripts/
   import-xlsx.ts       Excel 导入脚本（按表头模糊匹配，幂等 upsert）
+  notify.ts            手动触发订阅提醒扫描
+src/instrumentation.ts 服务启动钩子（注册提醒定时调度）
 ```
+
+## 运营后台
+
+`/admin` 运营采集台：赛事增删改与上下架、投稿/报错审核队列、运营看板
+（城市×品类覆盖度矩阵、临近截止与状态异常复核清单）。登录密码配置在 `.env` 的 `ADMIN_PASSWORD`。
 
 ## 数据口径
 
