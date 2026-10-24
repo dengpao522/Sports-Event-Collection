@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRD · 全民运动（大众赛事聚合站 MVP）</title>
+<style>
+  :root{
+    --brand:#f97316; --brand-d:#ea580c; --brand-bg:#fff7ed;
+    --ink:#1f2937; --ink-2:#4b5563; --ink-3:#6b7280;
+    --line:#e5e7eb; --bg:#f9fafb; --card:#ffffff;
+    --green:#16a34a; --red:#dc2626; --blue:#2563eb; --amber:#d97706; --gray:#6b7280;
+    --ok:#16a34a; --warn:#d97706; --bad:#dc2626;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.7;font-size:15px}
+  a{color:var(--brand-d);text-decoration:none}
+  code{background:#f3f4f6;padding:1px 6px;border-radius:4px;font-size:13px;color:#be185f;
+    font-family:ui-monospace,Consolas,Menlo,monospace}
+  h1{font-size:28px;margin:0 0 4px}
+  h2{font-size:22px;margin:44px 0 14px;padding-top:10px;border-top:3px solid var(--brand)}
+  h3{font-size:17px;margin:28px 0 10px}
+  h4{font-size:15px;margin:18px 0 6px;color:var(--ink)}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0;padding-left:22px}
+  li{margin:4px 0}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px;background:var(--card)}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f3f4f6;font-weight:600;white-space:nowrap}
+  .wrap{display:flex;max-width:1240px;margin:0 auto;gap:28px;padding:0 20px}
+  nav{width:230px;flex-shrink:0}
+  nav .sticky{position:sticky;top:18px;max-height:94vh;overflow:auto;padding:16px 0}
+  nav .brand{font-weight:800;color:var(--brand-d);font-size:15px;margin-bottom:10px;padding-left:12px}
+  nav a{display:block;color:var(--ink-2);font-size:13px;padding:5px 12px;border-left:2px solid transparent;border-radius:0}
+  nav a:hover{background:var(--brand-bg);color:var(--brand-d);border-left-color:var(--brand)}
+  main{flex:1;min-width:0;background:var(--card);padding:36px 44px 80px;margin:18px 0;border:1px solid var(--line);border-radius:12px}
+  .meta{color:var(--ink-3);font-size:13px;margin-bottom:6px}
+  .tag{display:inline-block;font-size:12px;padding:1px 9px;border-radius:999px;font-weight:600;vertical-align:middle}
+  .t-p0{background:#fee2e2;color:#b91c1c}.t-p1{background:#fef3c7;color:#92400e}
+  .t-tbd{background:#e0e7ff;color:#3730a3}.t-new{background:#dcfce7;color:#166534}
+  .callout{border-radius:10px;padding:14px 18px;margin:16px 0;font-size:14px;border:1px solid}
+  .c-key{background:var(--brand-bg);border-color:#fed7aa}
+  .c-info{background:#eff6ff;border-color:#bfdbfe}
+  .c-warn{background:#fffbeb;border-color:#fde68a}
+  .c-good{background:#f0fdf4;border-color:#bbf7d0}
+  .fr{border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin:16px 0;background:#fffdfb}
+  .fr h3{margin-top:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .frid{font-family:ui-monospace,monospace;background:var(--brand);color:#fff;font-size:12px;padding:2px 9px;border-radius:6px;font-weight:700}
+  .fr dl{margin:6px 0;display:grid;grid-template-columns:96px 1fr;gap:4px 14px;font-size:14px}
+  .fr dt{color:var(--ink-3);font-weight:600}
+  .fr dd{margin:0}
+  .kicker{font-size:12px;color:var(--ink-3);letter-spacing:1px;text-transform:uppercase;margin-top:26px}
+
+  /* ===== 交互原型通用 ===== */
+  .demo{border:1.5px dashed var(--brand);border-radius:12px;overflow:hidden;margin:18px 0;background:#fff}
+  .demo-bar{background:var(--brand);color:#fff;font-size:12.5px;font-weight:700;padding:7px 14px;display:flex;justify-content:space-between;align-items:center}
+  .demo-bar .hint{font-weight:400;opacity:.9}
+  .demo-body{padding:16px}
+  .phone{max-width:430px;margin:0 auto;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#fcfcfd;box-shadow:0 6px 24px rgba(0,0,0,.06)}
+  .phead{padding:14px 16px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:2}
+  .phead .city{font-size:12px;color:var(--brand-d);font-weight:700}
+  .phead h5{margin:2px 0 8px;font-size:17px}
+  .psearch{width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;background:#f9fafb}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);background:#fff}
+  .chip{font-size:12px;padding:3px 11px;border-radius:999px;border:1px solid var(--line);background:#fff;cursor:pointer;user-select:none;color:var(--ink-2)}
+  .chip.on{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+  .seg{display:flex;gap:6px;padding:8px 16px;background:#fafafa;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .seg .chip{font-size:11.5px;padding:2px 9px}
+  .elist{padding:8px 12px 14px;max-height:430px;overflow:auto}
+  .ecard{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin:8px 0;cursor:pointer;background:#fff;transition:.12s}
+  .ecard:hover{border-color:var(--brand);box-shadow:0 3px 10px rgba(249,115,22,.12)}
+  .ecard .t1{font-weight:700;font-size:14px;margin-bottom:3px}
+  .ecard .t2{font-size:12px;color:var(--ink-3);display:flex;gap:10px;flex-wrap:wrap}
+  .ecat{font-size:11px;background:#f3f4f6;color:var(--ink-2);border-radius:5px;padding:0 6px;margin-right:4px}
+  .badge{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;white-space:nowrap}
+  .b-open{background:#dcfce7;color:#15803d}
+  .b-soon{background:#dbeafe;color:#1d4ed8}
+  .b-wait{background:#fef3c7;color:#b45309}
+  .b-full{background:#ffedd5;color:#c2410c}
+  .b-closed{background:#f3f4f6;color:#6b7280}
+  .b-end{background:#f3f4f6;color:#9ca3af}
+  .verify{font-size:11px;color:var(--blue)}
+  .unverify{font-size:11px;color:var(--amber)}
+  .empty{text-align:center;padding:26px 18px;color:var(--ink-3);font-size:13px}
+  .empty .btn{margin-top:12px}
+  .btn{display:inline-block;border:none;border-radius:9px;padding:8px 18px;font-size:13.5px;font-weight:700;cursor:pointer;background:var(--brand);color:#fff}
+  .btn.ghost{background:#fff;color:var(--brand-d);border:1px solid var(--brand)}
+  .btn.sm{padding:5px 12px;font-size:12.5px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  /* 详情/订阅 */
+  .d-head{padding:16px;background:linear-gradient(135deg,#fff7ed,#fff)}
+  .d-head h5{margin:6px 0 4px;font-size:17px}
+  .d-row{display:flex;gap:10px;padding:10px 16px;border-bottom:1px solid #f3f4f4;font-size:13px}
+  .d-row .k{width:64px;color:var(--ink-3);flex-shrink:0}
+  .timeline{display:flex;align-items:center;padding:16px;gap:0}
+  .tl-step{flex:1;text-align:center;position:relative;font-size:11px;color:var(--ink-3)}
+  .tl-dot{width:14px;height:14px;border-radius:50%;background:#e5e7eb;margin:0 auto 5px;border:3px solid #fff;box-shadow:0 0 0 1px #e5e7eb;z-index:2;position:relative}
+  .tl-step.done .tl-dot{background:var(--green);box-shadow:0 0 0 1px var(--green)}
+  .tl-step.cur .tl-dot{background:var(--brand);box-shadow:0 0 0 4px #fed7aa}
+  .tl-step:not(:last-child)::after{content:"";position:absolute;top:6px;left:50%;width:100%;height:2px;background:#e5e7eb;z-index:0}
+  .tl-step.done:not(:last-child)::after{background:var(--green)}
+  .tl-step.cur{color:var(--brand-d);font-weight:700}
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-mask.show{display:flex}
+  .modal{background:#fff;border-radius:14px;max-width:360px;width:100%;padding:22px;position:relative}
+  .modal h6{margin:0 0 6px;font-size:16px}
+  .modal p{font-size:13px;color:var(--ink-2);margin:6px 0 14px}
+  .modal input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;margin-bottom:12px}
+  .modal .x{position:absolute;top:10px;right:14px;cursor:pointer;color:var(--ink-3);font-size:18px;background:none;border:none}
+  .ok-box{text-align:center;padding:8px 0}
+  .ok-box .big{font-size:34px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:9px 18px;border-radius:9px;font-size:13px;opacity:0;transition:.25s;z-index:60;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:900px){nav{display:none}main{padding:24px 18px}.grid2{grid-template-columns:1fr}}
+  .foot-note{font-size:12px;color:var(--ink-3);margin-top:40px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <div class="sticky">
+      <div class="brand">全民运动 · PRD</div>
+      <a href="#summary">结论先行</a>
+      <a href="#bg">一、背景与问题</a>
+      <a href="#goal">二、目标与非目标</a>
+      <a href="#user">三、用户与场景</a>
+      <a href="#scope">四、产品范围（P0/P1）</a>
+      <a href="#model">五、核心对象与数据模型</a>
+      <a href="#flow">六、核心流程</a>
+      <a href="#fr">七、P0 功能需求</a>
+      <a href="#rules">八、共享规则与异常</a>
+      <a href="#ops">九、采集运营机制</a>
+      <a href="#p1">十、P1 与后续演进</a>
+      <a href="#open">十一、决策记录与待办</a>
+    </div>
+  </nav>
+
+<main>
+  <h1>全民运动 <span class="tag t-new">MVP 产品需求文档</span></h1>
+  <div class="meta">版本 v0.2（关键决策已确认）　｜　日期 2026-10-24　｜　负责人：Zhaojianhui（个人项目）　｜　关联仓库：dengpao522/Sports-Event-Collection</div>
+
+  <!-- ============ 结论先行 ============ -->
+  <h2 id="summary">结论先行</h2>
+  <div class="callout c-key">
+    <b>一句话定位：</b>一个由个人运营、把<b>分散在各公众号 / 小程序 / 官网 / 协会通知里的"大众可报名赛事"聚合到一处</b>的网站，让普通人按<b>城市 × 运动品类 × 时间</b>快速找到自己能参加的比赛，并在报名开启/截止前收到提醒。<br><br>
+    <b>对"一定要全"的产品回答：</b>不追求一次性全国全品类，而追求在首发城市（上海、杭州）做到<b>"可报名赛事不漏 + 信息差透明"</b>，跑通后再向江浙沪其余城市与全国复制。透明化的三件套是本站差异化核心：
+    <b>① 待官宣订阅</b>（年度固定赛事先占位、官宣即通知）、<b>② 品类空窗明示</b>（查不到时告诉用户"为什么没有、往年什么时候有"）、<b>③ 找不到就提需求</b>（用户一句话，运营定向补采）。
+  </div>
+  <table>
+    <tr><th>维度</th><th>MVP 决策</th></tr>
+    <tr><td>产品名称</td><td><b>全民运动</b>（大众赛事聚合站）；域名待注册时确认可用性，见 11.2 T1</td></tr>
+    <tr><td>运营主体</td><td><b>个人</b>运营，以个人主体完成 ICP 备案；暂不设个体户/公司，待商业化阶段再评估</td></tr>
+    <tr><td>提醒渠道</td><td>P0 用<b>邮件</b>（免注册、免资质，含订阅确认邮件）；微信服务号通知放到 P1</td></tr>
+    <tr><td>首发城市</td><td><b>上海、杭州</b>两城（已有采集数据，MVP 即用沪杭数据上线）；南京/苏州/宁波等江浙沪城市作为 P1 第一批扩张，按需求池热度滚动补齐</td></tr>
+    <tr><td>收录边界</td><td><b>大众（业余）可报名</b>的赛事；含个人赛与团队赛；不含纯职业赛事资讯（是否轻量收录"观赛"内容见 11.2 T3）</td></tr>
+    <tr><td>数据来源</td><td>早期以运营人工采集公开信息为主（沿用现有 Excel 工作流），开放用户投稿/报错；不依赖主办方合作</td></tr>
+    <tr><td>MVP 核心能力</td><td>赛事查询（筛选/搜索）＋ 赛事详情（官方报名指引）＋ 收藏与提醒（报名开启/截止/变更）＋ 空窗反馈/投稿 ＋ 运营采集台（含 Excel 批量导入）</td></tr>
+    <tr><td>明确不做</td><td>站内报名、代收报名费、比分直播、职业资讯流、主办方后台、社交社区（均后置或不做）</td></tr>
+  </table>
+
+  <!-- ============ 一、背景 ============ -->
+  <h2 id="bg">一、背景与问题</h2>
+  <h3>1.1 观察到的问题（已由实际采集验证）</h3>
+  <p>运营方在 2026-10 已实际完成上海、杭州、西安三份赛事清单的采集，过程本身即验证了痛点：</p>
+  <ul>
+    <li><b>发布通道极度分散。</b>同类赛事散落在体育局官网、赛事公众号、微信小程序（如"最酷""曲江体育"）、协会网站、品牌方公众号、本地宝等十余个渠道，普通用户没有能力逐一跟踪。</li>
+    <li><b>信息时效强、窗口短。</b>大量赛事"先报先得、报满即止"，旗舰赛则是抽签制且报名窗口与比赛日相隔数月（如杭州马拉松 7 月报名、11 月开赛），错过即等一年。</li>
+    <li><b>存在大量"信息差焦虑"。</b>用户甚至不知道"有这个比赛存在过"；年度固定赛事（如西湖冬泳、新年登高）每年都有，但下一届何时官宣无人提醒。</li>
+    <li><b>空窗本身也是信息。</b>采集发现不少品类在特定季节是"真空"（如冬季主城区无路跑大赛、飞盘联赛 5–10 月赛季后收官），用户反复查询却只得到空白结果，体验差且不知道原因。</li>
+  </ul>
+  <h3>1.2 受影响的用户与时刻</h3>
+  <p>核心用户是<b>有运动习惯、想参赛但缺乏赛事信息渠道的大众运动爱好者</b>。关键时刻：想找一个"最近、在我城市、我这个水平能报"的比赛时；以及担心错过某场年度赛事报名窗口时。</p>
+  <h3>1.3 产品回应与可观察结果</h3>
+  <ul>
+    <li>把分散信息聚合为统一的<b>可筛选赛事列表 + 标准化报名指引</b>，结果可观察：用户在 3 次点击内定位到一场可报名赛事及其官方报名入口。</li>
+    <li>用<b>提醒</b>解决"错过窗口"，结果可观察：用户订阅后，在报名开启/截止前收到触达。</li>
+    <li>用<b>空窗明示与待官宣订阅</b>解决"查不到/不知道"，结果可观察：任何筛选结果为 0 的页面，都会给出原因解释或补采入口，而不是空白。</li>
+  </ul>
+  <div class="callout c-info"><b>关于主办方不合作的现实：</b>MVP 不把"主办方主动入驻/授权"作为前提。平台只做<b>公开信息的聚合与指引</b>，报名始终跳转官方渠道、不经手费用；待流量形成后，主办方自助发布才是水到渠成的 P1/P2 能力。</div>
+
+  <!-- ============ 二、目标 ============ -->
+  <h2 id="goal">二、目标与非目标</h2>
+  <h3>2.1 MVP 目标（定性、可观察）</h3>
+  <ol>
+    <li><b>找得到：</b>在首发的上海、杭州两城，用户能按城市/品类/时间/报名状态检索到当前可报名或即将报名的大众赛事。</li>
+    <li><b>报得上：</b>每场赛事都给出明确的"去哪报、怎么报"的官方操作指引或链接，并标注信息核实时间。</li>
+    <li><b>不错过：</b>对"即将报名 / 待官宣 / 报名中临近截止"的赛事，用户可一键订阅提醒。</li>
+    <li><b>不空白：</b>无结果时给出空窗原因、往年档期或补采入口，把"信息差"显性化。</li>
+    <li><b>可持续更新：</b>运营能用接近现有 Excel 的成本完成录入、批量导入与状态维护，支撑一个人也能运转。</li>
+  </ol>
+  <h3>2.2 非目标（MVP 明确不做，防止范围蔓延）</h3>
+  <ul>
+    <li>不做站内报名、抽签、收费、退款——报名与资金全部留在官方渠道。</li>
+    <li>不做职业联赛的资讯流、比分、直播、数据统计。</li>
+    <li>不做主办方自助发布后台与权限体系（运营单角色即可）。</li>
+    <li>不做用户社交/动态/组队社区（可作为 P2 探索）。</li>
+    <li>不以"全国一次铺满"为目标，覆盖度按城市×品类逐步推进。</li>
+  </ul>
+
+  <!-- ============ 三、用户 ============ -->
+  <h2 id="user">三、用户与场景</h2>
+  <h3>3.1 角色</h3>
+  <table>
+    <tr><th>角色</th><th>说明</th><th>权限要点</th></tr>
+    <tr><td>访客（未登录）</td><td>直接打开网站的大多数用户</td><td>可浏览、筛选、搜索、查看详情与报名指引；可用邮箱单场订阅提醒；收藏仅存本机</td></tr>
+    <tr><td>注册用户 <span class="tag t-p1">P1</span></td><td>希望跨设备收藏、管理订阅、生成"我的赛程"</td><td>在访客能力之上增加云端收藏、订阅管理、历史记录</td></tr>
+    <tr><td>运营采集员</td><td>MVP 阶段即负责人本人</td><td>进入内部采集台：录入/导入/编辑赛事、审核投稿、维护状态与核实标记、查看覆盖度</td></tr>
+    <tr><td>赛事主办方 <span class="tag t-p1">P1+</span></td><td>未来自助发布赛事</td><td>MVP 不开放账号；其需求现阶段通过"投稿/联系运营"承接</td></tr>
+  </table>
+  <div class="callout c-info"><b>关键产品判断：</b>提醒是 MVP 最核心的留资动作，但<b>不必先建账号体系</b>。单场赛事"留邮箱即可订阅"能把门槛降到最低；跨设备收藏、我的赛程等重功能随账号体系放到 P1。</div>
+  <h3>3.2 典型场景</h3>
+  <ul>
+    <li><b>场景 A · 就近找赛：</b>"这两个月杭州，我能报的跑步比赛有哪些？" → 选城市+品类+时间，看到报名中的赛事与截止时间，点进去按指引报名。</li>
+    <li><b>场景 B · 盯年度赛：</b>"西湖冬泳元旦都有，今年什么时候开报名？" → 赛事已以"待官宣"占位，用户订阅，官宣后收到提醒。</li>
+    <li><b>场景 C · 怕错过截止：</b>某 10K 赛"报名中"，用户怕忘 → 订阅"截止前提醒"。</li>
+    <li><b>场景 D · 查无结果：</b>"西安冬天有没有羽毛球个人公开赛？" → 页面明确显示该品类当前空窗、往年集中在 8–9 月，并提供"开赛了通知我 / 我要报别的赛"。</li>
+    <li><b>场景 E · 共建：</b>用户发现一场运营漏采的比赛或信息有误 → 一键投稿/报错，运营审核后上线。</li>
+  </ul>
+
+  <!-- ============ 四、范围 ============ -->
+  <h2 id="scope">四、产品范围（P0 / P1）</h2>
+  <p>P0 旅程的完成标准：<b>用户从进入网站 → 找到目标赛事 → 拿到官方报名方式或成功订阅提醒，全程闭环；查无结果时也有明确出口。</b></p>
+  <table>
+    <tr><th>编号</th><th>能力</th><th>层级</th><th>服务于闭环的哪一步</th></tr>
+    <tr><td>FR-01</td><td>赛事列表与多维筛选（城市/品类/时间/状态）</td><td><span class="tag t-p0">P0</span></td><td>找得到</td></tr>
+    <tr><td>FR-02</td><td>关键词搜索</td><td><span class="tag t-p0">P0</span></td><td>找得到</td></tr>
+    <tr><td>FR-03</td><td>赛事详情与官方报名指引</td><td><span class="tag t-p0">P0</span></td><td>报得上</td></tr>
+    <tr><td>FR-04</td><td>收藏 + 报名/官宣/截止提醒（邮箱轻订阅）</td><td><span class="tag t-p0">P0</span></td><td>不错过</td></tr>
+    <tr><td>FR-05</td><td>赛事状态时间线（待官宣→报名→截止→开赛→结束）</td><td><span class="tag t-p0">P0</span></td><td>报得上 / 不错过</td></tr>
+    <tr><td>FR-06</td><td>空窗明示与"找赛需求"提交</td><td><span class="tag t-p0">P0</span></td><td>不空白</td></tr>
+    <tr><td>FR-07</td><td>用户投稿赛事 / 报错</td><td><span class="tag t-p0">P0</span></td><td>数据共建</td></tr>
+    <tr><td>FR-08</td><td>运营采集台（录入、Excel 导入、状态维护、投稿审核、覆盖度）</td><td><span class="tag t-p0">P0</span></td><td>可持续更新</td></tr>
+    <tr><td>—</td><td>账号体系 / 云端收藏 / 我的赛程</td><td><span class="tag t-p1">P1</span></td><td>留存增强</td></tr>
+    <tr><td>—</td><td>微信服务号/模板消息触达、Web Push</td><td><span class="tag t-p1">P1</span></td><td>触达增强</td></tr>
+    <tr><td>—</td><td>主办方自助发布后台</td><td><span class="tag t-p1">P1+</span></td><td>规模化供给</td></tr>
+  </table>
+
+  <!-- ============ 五、数据模型 ============ -->
+  <h2 id="model">五、核心对象与数据模型</h2>
+  <p>以下定义产品层面的字段口径（不含数据库/接口设计），并与现有三份 Excel 的字段对齐，保证历史数据可直接迁移。</p>
+
+  <h3>5.1 赛事（Event）字段</h3>
+  <table>
+    <tr><th>字段</th><th>必填</th><th>说明 / 取值</th><th>对应现有 Excel</th></tr>
+    <tr><td>赛事名称</td><td>是</td><td>官方全称，可附规模/俗称，如"2026 大运河 10 公里挑战赛（1 万人）"</td><td>赛事名称</td></tr>
+    <tr><td>运动品类</td><td>是</td><td>一级品类单选 + 二级标签多选（见 5.2）</td><td>品类</td></tr>
+    <tr><td>省 / 城市</td><td>是</td><td>省级固定"上海市/江苏省/浙江省"；城市为枚举</td><td>地点（拆分）</td></tr>
+    <tr><td>具体地点</td><td>否</td><td>场馆/起跑点/区域，如"拱墅·中国京杭大运河博物院"</td><td>地点</td></tr>
+    <tr><td>比赛日期</td><td>是</td><td>单日 / 日期区间 / <code>待定</code>；待官宣赛事存"预计月份/往年档期"</td><td>比赛日期</td></tr>
+    <tr><td>报名状态</td><td>是</td><td>枚举，见 5.3；系统可按时间自动推进，运营可覆盖</td><td>报名状态</td></tr>
+    <tr><td>报名开始 / 截止时间</td><td>条件</td><td>状态为报名相关时必填精确时间；未知填<code>待核实</code>；报满即止型标注"报完即止"</td><td>报名截止</td></tr>
+    <tr><td>报名方式与指引</td><td>是</td><td>结构化：渠道类型（小程序/官网/公众号/协会/现场）+ 操作步骤 + 外部链接</td><td>报名方式与备注</td></tr>
+    <tr><td>子项目</td><td>否</td><td>一场赛含多个项目时分别列出，如"10K / 欢乐跑 / 亲子跑"，各自可带门槛与费用</td><td>备注中隐含</td></tr>
+    <tr><td>规模 / 费用 / 门槛</td><td>否</td><td>人数、报名费、年龄/水平/是否团队制；未知留空，不臆造</td><td>备注中隐含</td></tr>
+    <tr><td>信息来源</td><td>是</td><td>来源名称 + 链接（官网/公告/公众号文章等）</td><td>新增（现靠备注）</td></tr>
+    <tr><td>核实状态 / 最近核实时间</td><td>是</td><td><code>已核实</code> / <code>待核实</code>；每次运营复核刷新时间</td><td>"需核实"标记升级</td></tr>
+    <tr><td>数据来源类型</td><td>是</td><td><code>运营采集</code> / <code>用户投稿（已审核）</code></td><td>—</td></tr>
+    <tr><td>海报 / 配图</td><td>否</td><td>官方海报；无则留空，不自动抓非授权图</td><td>—</td></tr>
+  </table>
+  <div class="callout c-warn"><b>数据纪律（对应"不臆造"原则）：</b>凡无法确认的时间、费用、规模，一律显示"待核实/以官方为准"，<b>不得用推测值填充并伪装成事实</b>。这是信息聚合站建立信任的底线。</div>
+
+  <h3>5.2 运动品类（一级 + 标签）</h3>
+  <table>
+    <tr><th>一级品类</th><th>典型标签（二级，可扩展）</th></tr>
+    <tr><td>跑步 / 路跑</td><td>马拉松、半马、10K/迷你跑、欢乐跑/亲子跑、越野跑、垂直马拉松、训练赛</td></tr>
+    <tr><td>球类</td><td>羽毛球、篮球（含三人篮球）、足球、乒乓球、网球、匹克球、排球、橄榄球（腰旗）</td></tr>
+    <tr><td>户外运动</td><td>徒步/登山、飞盘、露营定向、攀岩、滑板、垂钓</td></tr>
+    <tr><td>骑行</td><td>公路赛、山地赛、骑游、固齿</td></tr>
+    <tr><td>水上运动</td><td>游泳/公开水域、冬泳、铁人三项、桨板/皮划艇、帆船、龙舟</td></tr>
+    <tr><td>冰雪运动</td><td>滑雪、滑冰、冰球、雪地路跑（季节性）</td></tr>
+    <tr><td>室内 / 健身</td><td>健身健美、CrossFit、搏击/格斗、台球、街舞</td></tr>
+    <tr><td>棋牌 / 电竞 / 智力</td><td>围棋/象棋/国际象棋段级位赛、电竞大众赛、桥牌</td></tr>
+    <tr><td>其他 / 综合</td><td>城市业余联赛综合赛、群众体育大会、新年登高/迎新跑等节庆活动</td></tr>
+  </table>
+
+  <h3>5.3 赛事报名状态枚举（全站唯一定义）</h3>
+  <table>
+    <tr><th>状态</th><th>含义</th><th>前台呈现</th><th>用户动作</th></tr>
+    <tr><td><code>待官宣</code></td><td>年度固定/已传言但下一届未发布，无确切报名信息</td><td>黄色"待官宣"，展示预计/往年档期</td><td>可订阅"开报名提醒"</td></tr>
+    <tr><td><code>即将报名</code></td><td>已官宣，报名尚未开始，有明确开启时间</td><td>蓝色"X月X日开报"</td><td>可订阅开启提醒</td></tr>
+    <tr><td><code>报名中</code></td><td>报名窗口进行中</td><td>绿色"报名中"，显示截止倒计时</td><td>去报名 / 订阅截止提醒</td></tr>
+    <tr><td><code>报满即止</code></td><td>报名中但无固定截止，额满即止</td><td>橙色"报满即止，尽快"</td><td>去报名</td></tr>
+    <tr><td><code>已截止</code></td><td>报名窗口关闭，赛事未开始</td><td>灰色"报名已截止"</td><td>仅查看，可订阅来年提醒</td></tr>
+    <tr><td><code>进行中</code></td><td>比赛日当天/赛期内</td><td>灰色"进行中"</td><td>仅查看</td></tr>
+    <tr><td><code>已结束</code></td><td>赛事已完赛（转为历史/来年参考）</td><td>灰色"已结束"，显示下一届预计</td><td>订阅来年提醒</td></tr>
+    <tr><td><code>延期/取消</code></td><td>官方变更</td><td>红色醒目，展示变更说明</td><td>对订阅者触发变更通知</td></tr>
+  </table>
+
+  <!-- ============ 六、流程 ============ -->
+  <h2 id="flow">六、核心流程</h2>
+  <h3>6.1 用户找赛决策流程</h3>
+  <div class="callout c-info" style="font-family:ui-monospace,Consolas,monospace;font-size:13px;white-space:pre-wrap;line-height:1.9">进入网站（默认定位：上次选择/默认上海）
+   │
+   ├─ 直接浏览 / 选城市 → 选品类 → 选时间 → 选报名状态
+   │                                    │
+   │                              ┌─────┴─────┐
+   │                          有结果        无结果（FR-06）
+   │                              │             │
+   │                        看赛事卡片     显示「品类空窗卡」：
+   │                              │         · 为什么没有（赛季/已收官）
+   │                        进入详情 FR-03    · 往年档期
+   │                              │         · 「有赛通知我」订阅
+   │                    ┌─────────┼─────────┐ · 「我要找的比赛」投稿
+   │              报名中/报满即止  待官宣/即将   信息有误
+   │                    │         报名        │
+   │              按官方指引报名  订阅提醒    FR-07 报错
+   │                    │      （FR-04）
+   │              订阅截止提醒 ◄─┘
+   │
+   └─ 关键词搜索（FR-02）→ 命中赛事 / 命中历史赛（引导订阅来年）/ 无结果（同上空窗出口）</div>
+
+  <h3>6.2 提醒闭环</h3>
+  <ol>
+    <li>用户在赛事卡片/详情点"提醒我"，选择提醒类型并留邮箱（P0）；无需注册。</li>
+    <li>系统按状态与时间生成待触发任务（开启提醒 / 截止前提醒 / 变更提醒 / 来年提醒）。</li>
+    <li>到达触发点发送邮件；用户点击邮件可一键查看赛事或取消订阅。</li>
+    <li>赛事延期/取消时，对所有订阅者强制触达变更通知。</li>
+  </ol>
+
+  <h3>6.3 状态时间线</h3>
+  <div class="demo">
+    <div class="demo-bar">交互原型 · 赛事状态时间线（FR-05）<span class="hint">随报名状态自动高亮当前阶段</span></div>
+    <div class="demo-body">
+      <div class="phone">
+        <div class="d-head">
+          <span class="badge b-wait" id="tlBadge">待官宣</span>
+          <h5 id="tlName">杭州市新年登高活动</h5>
+          <div style="font-size:12px;color:var(--ink-3)">西湖·杨家牌楼 → 法喜寺 ｜ 预计 2027 年 1 月上旬</div>
+        </div>
+        <div class="timeline" id="tl">
+          <div class="tl-step" data-s="0"><div class="tl-dot"></div>待官宣</div>
+          <div class="tl-step" data-s="1"><div class="tl-dot"></div>报名中</div>
+          <div class="tl-step" data-s="2"><div class="tl-dot"></div>报名截止</div>
+          <div class="tl-step" data-s="3"><div class="tl-dot"></div>开赛</div>
+          <div class="tl-step" data-s="4"><div class="tl-dot"></div>已结束</div>
+        </div>
+        <div style="padding:0 16px 16px">
+          <div style="font-size:12px;color:var(--ink-3);margin-bottom:6px">演示：切换该赛事的当前状态</div>
+          <div class="seg" style="padding:0;border:none;background:none">
+            <span class="chip on" data-set="0">待官宣</span>
+            <span class="chip" data-set="1">报名中</span>
+            <span class="chip" data-set="2">已截止</span>
+            <span class="chip" data-set="3">开赛</span>
+            <span class="chip" data-set="4">结束</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 七、功能需求 ============ -->
+  <h2 id="fr">七、P0 功能需求</h2>
+  <p class="kicker">模块 A · 用户前台</p>
+
+  <div class="fr">
+    <h3><span class="frid">FR-01</span>赛事列表与多维筛选</h3>
+    <dl>
+      <dt>目的</dt><dd>让用户在最短路径内看到"我能报"的赛事。</dd>
+      <dt>触发</dt><dd>任何访客进入首页/赛事页。</dd>
+      <dt>规则</dt><dd>
+        ① 默认城市为上次选择，首次访问默认上海；MVP 仅开放上海、杭州两城切换，其余城市（南京/苏州/宁波等）在城市列表中显示"即将开通"并可订阅上线提醒。<br>
+        ② 筛选项：运动品类（一级 chips + 可展开标签）、时间（本月 / 未来 3 个月 / 自定义区间 / 待定档期）、报名状态（默认勾选"报名中+即将报名+待官宣+报满即止"，可切换看"已截止/已结束"）。<br>
+        ③ 列表默认按"报名紧迫度 + 比赛日期近"排序：报满即止/临近截止在前，其后按比赛日升序；已结束沉底。<br>
+        ④ 卡片展示：赛事名、品类标签、城市与地点、比赛日期、报名状态徽章、报名截止/倒计时、核实标记。
+      </dd>
+      <dt>结果</dt><dd>筛选条件即时生效并反映在 URL（可分享）；结果数实时显示。</dd>
+      <dt>异常</dt><dd>无结果时不显示空白页，进入 <b>FR-06 空窗态</b>；城市未开通时显示开通计划与订阅入口。</dd>
+    </dl>
+    <!-- 交互原型 A -->
+    <div class="demo">
+      <div class="demo-bar">交互原型 A · 赛事发现页（FR-01 / FR-02 / FR-06）<span class="hint">可真实点击：城市、品类、状态、关键词联动筛选，试试搜"马拉松"或选"羽毛球"</span></div>
+      <div class="demo-body">
+        <div class="phone">
+          <div class="phead">
+            <div class="city" id="curCity">📍 上海 · 切换城市 ▾</div>
+            <h5>找一场你能参加的比赛</h5>
+            <input class="psearch" id="kw" placeholder="搜索赛事名 / 地点，如：马拉松、滨江、登高">
+          </div>
+          <div class="chips" id="cityChips">
+            <span class="chip on" data-city="上海">上海</span>
+            <span class="chip" data-city="杭州">杭州</span>
+            <span class="chip" style="opacity:.55;cursor:default" title="MVP 后开通，可订阅上线提醒">南京·即将开通</span>
+            <span class="chip" style="opacity:.55;cursor:default" title="MVP 后开通，可订阅上线提醒">苏州·即将开通</span>
+            <span class="chip" style="opacity:.55;cursor:default" title="MVP 后开通，可订阅上线提醒">宁波·即将开通</span>
+          </div>
+          <div class="chips" id="catChips">
+            <span class="chip on" data-cat="全部">全部</span>
+            <span class="chip" data-cat="跑步">跑步/路跑</span>
+            <span class="chip" data-cat="球类">球类</span>
+            <span class="chip" data-cat="户外">户外</span>
+            <span class="chip" data-cat="骑行">骑行</span>
+            <span class="chip" data-cat="水上">水上</span>
+            <span class="chip" data-cat="棋牌">棋牌/智力</span>
+          </div>
+          <div class="seg" id="statusChips">
+            <span class="chip on" data-st="可报名">可报名</span>
+            <span class="chip on" data-st="即将报名">即将/待官宣</span>
+            <span class="chip" data-st="已截止">已截止/结束</span>
+          </div>
+          <div class="elist" id="elist"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fr">
+    <h3><span class="frid">FR-02</span>关键词搜索</h3>
+    <dl>
+      <dt>触发</dt><dd>在搜索框输入关键词（≥2 字符）或提交。</dd>
+      <dt>规则</dt><dd>匹配赛事名称、地点、子项目、品类标签；与当前城市/筛选条件取交集。匹配历史（已结束）赛事时，单独分组提示"今年已结束，可订阅来年"。</dd>
+      <dt>异常</dt><dd>无命中走 FR-06；纯空格/过短不触发。</dd>
+    </dl>
+  </div>
+
+  <div class="fr">
+    <h3><span class="frid">FR-03</span>赛事详情与官方报名指引</h3>
+    <dl>
+      <dt>目的</dt><dd>给用户"能不能报、去哪报、怎么报"的确定答案。</dd>
+      <dt>内容</dt><dd>赛事头图/名称/状态；时间地点；规模/费用/门槛；子项目；<b>报名指引卡（渠道+步骤+「前往官方报名」外链）</b>；信息来源与"最近核实时间"；状态时间线（FR-05）；收藏与提醒入口（FR-04）。</dd>
+      <dt>规则</dt><dd>外链统一新窗口打开并带"以官方信息为准"提示；信息为<code>待核实</code>时在相应字段显著标注；延期/取消信息置顶红色条。</dd>
+      <dt>异常</dt><dd>官方链接失效时显示并提供"报错"；待官宣赛事不展示报名按钮，仅展示订阅。</dd>
+    </dl>
+  </div>
+
+  <div class="fr">
+    <h3><span class="frid">FR-04</span>收藏与提醒（报名开启 / 截止 / 变更）</h3>
+    <dl>
+      <dt>触发</dt><dd>用户点击"♡ 收藏"或"🔔 提醒我"。</dd>
+      <dt>规则</dt><dd>
+        ① <b>收藏</b>：未登录时存浏览器本机，明确提示"仅本机可见，登录可多端同步（P1）"。<br>
+        ② <b>提醒（P0 免注册）</b>：按状态提供可订阅项——待官宣/即将报名→"开报名提醒"；报名中→"截止前 1 天提醒"（可加 3 天）；已截止/已结束→"来年提醒"。提交仅需邮箱，做邮箱格式校验，提交后发一次确认邮件（双重确认，防误填）。<br>
+        ③ 同一邮箱对同赛事同类型重复订阅不重复创建；每个赛事可在详情页管理/取消。
+      </dd>
+      <dt>结果</dt><dd>订阅成功即时反馈并写入订阅列表；状态变更/到达时点按 6.2 触达。</dd>
+      <dt>异常</dt><dd>邮箱重复/无效给出明确提示；P0 触达渠道已确定为邮件（见 11.1 D3）。</dd>
+    </dl>
+    <!-- 交互原型 B -->
+    <div class="demo">
+      <div class="demo-bar">交互原型 B · 赛事详情 + 免注册订阅提醒（FR-03 / FR-04）<span class="hint">点击"提醒我"体验订阅弹窗与成功态</span></div>
+      <div class="demo-body">
+        <div class="phone" id="detailPhone">
+          <div class="d-head">
+            <span class="badge b-wait">待官宣</span>
+            <h5>2027 杭州市新年登高活动</h5>
+            <div style="font-size:12px;color:var(--ink-3)">年度固定 · 预计 1 月上旬 ｜ 西湖·杨家牌楼→法喜寺</div>
+          </div>
+          <div class="d-row"><div class="k">比赛日期</div><div>2027 年 1 月上旬（2026 届为 1 月 10 日）</div></div>
+          <div class="d-row"><div class="k">报名方式</div><div>往年于 12 月由市体育局渠道发布，<b>本届尚未官宣</b></div></div>
+          <div class="d-row"><div class="k">信息来源</div><div>杭州市体育局往年公告　<span class="unverify">● 待核实（等本届官宣）</span></div></div>
+          <div style="padding:16px">
+            <button class="btn" style="width:100%" id="openSub">🔔 官宣开报名时提醒我</button>
+            <div style="font-size:11.5px;color:var(--ink-3);text-align:center;margin-top:8px">免注册 · 仅需邮箱 · 可随时取消</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fr">
+    <h3><span class="frid">FR-05</span>赛事状态时间线</h3>
+    <dl>
+      <dt>规则</dt><dd>每场赛事渲染统一五段时间线：待官宣 → 报名中 → 报名截止 → 开赛 → 已结束（延期/取消为旁路红色状态）。当前阶段高亮，已过阶段置绿。状态由"报名开始/截止时间 + 比赛日期"自动驱动，运营可手动覆盖（如报满即止提前额满）。</dd>
+      <dt>异常</dt><dd>时间字段缺失（待核实）时对应节点显示"时间待定"，不做错误推断。</dd>
+    </dl>
+  </div>
+
+  <div class="fr">
+    <h3><span class="frid">FR-06</span>空窗明示与"找赛需求"提交</h3>
+    <dl>
+      <dt>目的</dt><dd>把"查不到"从失败体验变成信任建设与需求收集——这是"全"的关键补偿机制。</dd>
+      <dt>触发</dt><dd>某城市+品类+时间筛选结果为 0，或搜索无命中。</dd>
+      <dt>规则</dt><dd>展示"品类空窗卡"：① 空窗原因（赛季已收官/该品类本季个人赛稀少等，由运营按城市×品类维护）；② 往年档期规律；③ 两个动作——<b>"有赛通知我"</b>（绑定该城市×品类，一旦录入新赛事即邮件通知）、<b>"我要找的比赛"</b>（一句话描述，进入运营补采队列）。</dd>
+      <dt>结果</dt><dd>提交写入需求池并在采集台按城市/品类聚合计数，指导补采优先级。</dd>
+    </dl>
+  </div>
+
+  <div class="fr">
+    <h3><span class="frid">FR-07</span>用户投稿赛事 / 信息报错</h3>
+    <dl>
+      <dt>触发</dt><dd>列表页"我要投稿"、详情页"信息有误？"。</dd>
+      <dt>规则</dt><dd>
+        投稿表单（尽量轻）：赛事名、城市、品类、已知时间/链接、投稿人联系方式（选填）。<br>
+        报错：预置问题类型（时间变了 / 报名已截止或已满 / 链接失效 / 赛事取消 / 其他）+ 补充说明。<br>
+        所有 UGC 默认<b>不直接上线</b>，进入采集台审核队列；上线后赛事标注"用户线索，已核实"。
+      </dd>
+      <dt>异常</dt><dd>反垃圾：同 IP/邮箱限频、必填项校验；违法违规内容在审核环节拦截（见共享规则）。</dd>
+    </dl>
+  </div>
+
+  <p class="kicker">模块 B · 运营后台（内部，仅运营角色）</p>
+  <div class="fr">
+    <h3><span class="frid">FR-08</span>运营采集台</h3>
+    <dl>
+      <dt>目的</dt><dd>让一个人能用最低成本维持数据"全且新"，直接复用现有 Excel 工作流。</dd>
+      <dt>功能</dt><dd>
+        ① <b>赛事增删改</b>：表单字段对齐第 5 章；支持草稿/发布。<br>
+        ② <b>Excel 批量导入</b>：提供与现有三份清单一致的模板（城市/品类/赛事名/比赛日期/地点/报名截止/报名状态/报名方式与备注），导入时做字段映射、必填校验、重复赛事检测，导入结果给出成功/失败/待确认清单。<br>
+        ③ <b>状态维护</b>：按时间自动推进状态；提供"临近需复核"列表（如截止时间标记了"需核实"、报名中且距今 3 天内）。<br>
+        ④ <b>投稿/报错审核队列</b>：通过→合并入库；拒绝→可填原因（P1 再做投稿人通知）。<br>
+        ⑤ <b>找赛需求池</b>：按城市×品类聚合，显示人数，作为补采优先级依据。<br>
+        ⑥ <b>覆盖度看板</b>：城市 × 一级品类矩阵，显示各格"可报名赛事数 + 最近更新时间"，空格标红，直观回答"哪里还不全"。
+      </dd>
+      <dt>规则</dt><dd>每次修改记录最近核实时间与来源；删除为软删除，保留历史赛事用于"来年提醒"与档期规律。</dd>
+    </dl>
+  </div>
+
+  <!-- ============ 八、共享规则 ============ -->
+  <h2 id="rules">八、共享规则与异常</h2>
+  <h3>8.1 状态流转规则</h3>
+  <ul>
+    <li>自动流转：到达"报名开始时间"→报名中；到达"截止时间"→已截止；到达比赛日→进行中；比赛日次日→已结束。</li>
+    <li><code>待官宣</code>不自动流转，需运营在官宣后补全信息再转<code>即将报名/报名中</code>，转换时自动通知订阅者。</li>
+    <li><code>报满即止</code>需运营手动转截止；<code>延期/取消</code>只能由运营依据官方信息设置，并触发变更通知。</li>
+    <li>时间为"待核实"的赛事不参与自动截止，进入复核列表，避免错误下线。</li>
+  </ul>
+  <h3>8.2 信息可信度与展示规则</h3>
+  <table>
+    <tr><th>标记</th><th>触发条件</th><th>前台表现</th></tr>
+    <tr><td>已核实</td><td>运营依据官方来源确认，且在时效窗口内</td><td>蓝色"✓ 官方信息 · MM-DD 核实"</td></tr>
+    <tr><td>待核实</td><td>关键字段（时间/链接）未确认，或超过复核周期</td><td>黄色"信息待核实，以官方为准"</td></tr>
+    <tr><td>变更</td><td>延期/取消</td><td>详情置顶红色变更条 + 通知订阅者</td></tr>
+  </ul>
+  <p>统一免责声明（详情页固定文案）：本站仅聚合公开信息，不代为报名或收费，<b>一切报名条件、时间与费用以赛事官方最新发布为准</b>。</p>
+  <h3>8.3 提醒触达规则</h3>
+  <ul>
+    <li>同一赛事同一节点对同一邮箱最多触达 1 次；变更通知不受此限。</li>
+    <li>截止提醒默认截止前 24 小时；用户可选 72 小时。</li>
+    <li>邮件底部必须有一键退订；退订即时生效。</li>
+  </ul>
+  <h3>8.4 权限与合规边界</h3>
+  <ul>
+    <li>权限：采集台仅运营可访问，URL 不对外暴露；P0 无其他后台角色。</li>
+    <li>内容合规：仅聚合与转述<b>公开可访问</b>的赛事信息并标注来源、链接回官方，不搬运付费/独家内容，不代收费用，规避版权与资金风险。</li>
+    <li>UGC：先审后发；拦截违法违规、广告引流、虚假赛事；P0 用人工审核即可（量小）。</li>
+    <li>个人信息：邮箱仅用于赛事提醒，不用于营销；提供退订；隐私政策页在正式收集邮箱前上线（见 11.2 T2）。</li>
+  </ul>
+  <h3>8.5 关键异常一览</h3>
+  <table>
+    <tr><th>场景</th><th>处理</th></tr>
+    <tr><td>城市未开通</td><td>显示开通计划 + "该城市上线通知我"，可投草稿需求</td></tr>
+    <tr><td>筛选/搜索无结果</td><td>进入 FR-06 空窗卡，绝不空白</td></tr>
+    <tr><td>报名链接失效</td><td>详情提示 + 一键报错；运营复核前对该链接置灰</td></tr>
+    <tr><td>赛事临时取消</td><td>运营置"延期/取消"并强制通知全部订阅者</td></tr>
+    <tr><td>导入文件格式/字段异常</td><td>整批预览、错误行标红可导出修正，不部分静默入库</td></tr>
+    <tr><td>邮件发送失败</td><td>重试有限次数后标记失效邮箱，不阻塞其他发送</td></tr>
+  </table>
+
+  <!-- ============ 九、运营 ============ -->
+  <h2 id="ops">九、采集运营机制（产品化视角）</h2>
+  <p>"全"靠运营机制兜底，建议把现有手工经验沉淀为固定信源清单与节奏：</p>
+  <ul>
+    <li><b>信源库（按城市）：</b>体育局/群体处官网与公众号、各单项运动协会（田协、羽协、棋院等）、主流报名平台（最酷、咕咚、马拉马拉、曲江体育类本地平台）、场馆/俱乐部公众号、本地宝/政务发布。每个城市维护一张信源表。</li>
+    <li><b>采集节奏：</b>周度巡检信源 + 节点重点（旗舰赛报名窗口、节庆固定赛 12 月/1 月档）。</li>
+    <li><b>年度赛事日历：</b>把已确认的"年度固定赛事"提前以<code>待官宣</code>占位（如西湖冬泳、新年登高、各城马拉松），形成天然的订阅库存。</li>
+    <li><b>覆盖度驱动补采：</b>以采集台矩阵空格 + 用户需求池计数决定每周补采方向。</li>
+  </ul>
+
+  <!-- ============ 十、P1 ============ -->
+  <h2 id="p1">十、P1 与后续演进</h2>
+  <ul>
+    <li><b>账号体系</b>：手机号/微信登录，云端收藏、订阅管理、"我的赛程"日历。</li>
+    <li><b>触达升级</b>：微信服务号模板消息（个人主体无法注册服务号，届时需先升级主体）、浏览器 Web Push。</li>
+    <li><b>供给升级</b>：主办方自助发布 + 认领赛事；投稿人激励与通知。</li>
+    <li><b>城市扩张</b>：跑通沪杭两城后，第一批扩南京/苏州/宁波，再按需求池热度扩长三角 → 全国。</li>
+    <li><b>能力探索（P2，需重新评估）</b>：同水平匹配/约赛、赛事评价、组队社区。</li>
+  </ul>
+
+  <!-- ============ 十一、决策记录与待办 ============ -->
+  <h2 id="open">十一、决策记录与待办</h2>
+  <h3>11.1 已确认决策（2026-10-24）</h3>
+  <table>
+    <tr><th>编号</th><th>事项</th><th>决策</th><th>后续动作</th></tr>
+    <tr><td>D1</td><td>产品名称</td><td><b>全民运动</b></td><td>注册域名时确认可用性（quanmin/sports 等候选）并自查商标；网站备案名称需与主体性质一致</td></tr>
+    <tr><td>D2</td><td>运营/备案主体</td><td><b>个人</b></td><td>以个人身份办理 ICP 备案；个人备案站点不得从事经营性活动，UGC 扩大化或广告变现前需重新评估升级为个体户/企业主体</td></tr>
+    <tr><td>D3</td><td>提醒触达渠道</td><td>P0 用<b>邮件</b>（免注册，含订阅确认邮件）</td><td>选型邮件发送服务（见 T4）；P1 再接微信服务号，且需先解决主体资质</td></tr>
+    <tr><td>D4</td><td>首发范围</td><td><b>上海、杭州</b>两城，用现有沪杭清单数据上线</td><td>南京/苏州/宁波列入 P1 第一批补采，暂不承诺开通时间</td></tr>
+  </table>
+  <h3>11.2 仍待确认（不阻塞 PRD，但阻塞对应环节）</h3>
+  <table>
+    <tr><th>编号</th><th>待办</th><th>影响</th><th>当前建议</th></tr>
+    <tr><td>T1</td><td>域名注册与 ICP 备案办理（个人主体）</td><td>网站正式对公众上线</td><td>尽早启动，备案审核通常需数个工作日；境内可备案云厂商任选其一</td></tr>
+    <tr><td>T2</td><td>隐私政策 / 用户协议上线</td><td>合规（收集邮箱的前置条件）</td><td>在正式收集邮箱前必须发布，可基于标准版隐私政策改写</td></tr>
+    <tr><td>T3</td><td>是否收录"只可观赛"的职业赛事</td><td>范围与定位</td><td>建议 P0 不做，避免稀释"找比赛参加"的核心定位</td></tr>
+    <tr><td>T4</td><td>邮件发送服务选型（自建 SMTP / 第三方事务邮件服务）</td><td>提醒到达率与成本</td><td>在技术方案中给出对比与推荐</td></tr>
+    <tr><td>T5</td><td>技术栈与部署方式确认</td><td>实现方案</td><td>下一步产出技术方案：轻服务端 + 一个关系库 + 静态前台</td></tr>
+  </table>
+
+  <div class="foot-note">
+    本文档为产品需求（PRD），不含技术架构与数据库设计；文中标注"待核实/待官宣"的内容均为<b>待确认项而非既定事实</b>。原型内赛事数据为演示用途，真实数据以运营采集与官方发布为准。<br>
+    下一步：基于已确认决策（全民运动 / 个人主体 / 邮件提醒 / 沪杭首发）产出<b>技术方案</b>，经批准后搭建最小可运行版本。
+  </div>
+</main>
+</div>
+
+<!-- 订阅弹窗 -->
+<div class="modal-mask" id="mask">
+  <div class="modal">
+    <button class="x" id="closeMask">×</button>
+    <div id="subForm">
+      <h6>🔔 订阅报名提醒</h6>
+      <p>《2027 杭州市新年登高活动》官宣开报名时，我们会第一时间邮件通知你。</p>
+      <input type="email" id="email" placeholder="输入你的邮箱，如 you@example.com">
+      <div style="display:flex;gap:10px">
+        <button class="btn ghost" id="cancelSub" style="flex:1">取消</button>
+        <button class="btn" id="confirmSub" style="flex:1">确认提醒</button>
+      </div>
+      <div style="font-size:11px;color:var(--bad);margin-top:8px;display:none" id="emailErr">请输入有效的邮箱地址</div>
+    </div>
+    <div id="subOk" style="display:none">
+      <div class="ok-box">
+        <div class="big">✅</div>
+        <h6 style="margin:6px 0">订阅成功</h6>
+        <p id="okMail">我们将在开报名时通知你。</p>
+        <button class="btn sm" id="doneSub">好的</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= 原型 A：赛事发现页 ================= */
+// 演示数据（虚构/改编自已采集清单，仅用于原型演示）
+var EVENTS = [
+  {n:"2026 上海城市业余联赛匹克球联赛总决赛（优特杯）", city:"上海", cat:"球类", st:"可报名", badge:"b-open", btxt:"报名中",
+   d:"11月7日（周六）", loc:"杨浦·上海国际时尚中心", c:"匹克球", v:true, note:"团体报名 10/19 12:00 截止"},
+  {n:"2026 虹口 10 公里精英赛", city:"上海", cat:"跑步", st:"可报名", badge:"b-open", btxt:"报名中·截止待核实",
+   d:"11月29日", loc:"虹口·北外滩国客中心码头", c:"跑步·10K", v:false, note:"5000 人 · 官方渠道报名"},
+  {n:"2026 上海长滩半程马拉松", city:"上海", cat:"跑步", st:"可报名", badge:"b-full", btxt:"报名信息待核实",
+   d:"11月15日", loc:"宝山·长滩", c:"半马", v:false, note:"跟踪本地宝/赛事公众号"},
+  {n:"2026 大运河 10 公里挑战赛（拱墅）", city:"杭州", cat:"跑步", st:"可报名", badge:"b-open", btxt:"报名中",
+   d:"11月14日 7:30", loc:"拱墅·京杭大运河博物院", c:"10K/欢乐跑/亲子跑", v:true, note:"1 万人 · 官方渠道"},
+  {n:"彩色欢乐跑 Color Fun Run", city:"杭州", cat:"跑步", st:"可报名", badge:"b-full", btxt:"报满即止",
+   d:"11月7日 9:00", loc:"滨江·奥体中心", c:"欢乐跑/亲子", v:true, note:"穿白 T 起跑 · runtothecolor.com"},
+  {n:"2026 MONTANE VIA 训练赛 · 杭州站", city:"杭州", cat:"户外", st:"可报名", badge:"b-open", btxt:"报名中",
+   d:"11月8日", loc:"余杭·中泰街道", c:"越野/训练赛", v:true, note:"小程序「最酷」报名，10/20 截止"},
+  {n:"2027 杭州市新年登高活动", city:"杭州", cat:"户外", st:"即将报名", badge:"b-wait", btxt:"待官宣",
+   d:"预计 2027年1月上旬", loc:"西湖·杨家牌楼→法喜寺", c:"登高/迎新", v:false, note:"往年 12 月官宣，体育局渠道"},
+  {n:"西湖冬泳表演赛（第 52 届）", city:"杭州", cat:"水上", st:"即将报名", badge:"b-wait", btxt:"待官宣",
+   d:"2027年1月1日", loc:"西湖·茅乡水情", c:"冬泳", v:false, note:"全国冬泳日 · 12 月官宣"},
+  {n:"2026 吉利汽车杭州马拉松", city:"杭州", cat:"跑步", st:"已截止", badge:"b-closed", btxt:"报名已截止",
+   d:"11月1日", loc:"杭州城区", c:"马拉松", v:true, note:"3.6 万人抽签制 · 明年 6 月下旬报名"}
+];
+
+var state = {city:"上海", cat:"全部", sts:{"可报名":true,"即将报名":true,"已截止":false}, kw:""};
+
+/* 各品类空窗原因（取自实际采集到的档期规律，随当前筛选品类动态显示） */
+var GAP_REASON = {
+  "全部":"该城市当前可报名赛事较少，可能处于赛季淡季，或部分赛事尚未官宣。",
+  "跑步":"路跑大赛有明显档期：冬季部分城市主城区为路跑淡季，年度旗舰赛（如城市马拉松）多为抽签制、报名窗口与比赛相隔数月，错过需等来年。",
+  "球类":"个人公开赛多集中在春秋季（如羽毛球品牌赛多集中在 8–9 月），冬季以球队制联赛为主，面向个人的公开赛较少。",
+  "户外":"飞盘等联赛 5–10 月赛季收官后冬季为空窗；登高/迎新类活动集中在元旦前后且通常 12 月才官宣。",
+  "骑行":"骑行公开赛多集中在春秋气候适宜时段，冬季场次明显减少。",
+  "水上":"公开水域窗口特殊：横渡类多在夏季、冬泳集中在元旦，其余季节可报名场次稀少。",
+  "棋牌":"段级位赛多按年度固定档期进行（如春季段级位赛通常于年初发布通知），非赛季窗口暂无新赛。"
+};
+
+function elist(){ return document.getElementById('elist'); }
+
+function render(){
+  var box = elist();
+  var kw = state.kw.trim().toLowerCase();
+  var list = EVENTS.filter(function(e){
+    if(e.city!==state.city) return false;
+    if(state.cat!=="全部" && e.cat!==state.cat) return false;
+    if(!state.sts[e.st]) return false;
+    if(kw && (e.n.toLowerCase().indexOf(kw)<0 && e.loc.toLowerCase().indexOf(kw)<0 && e.c.toLowerCase().indexOf(kw)<0)) return false;
+    return true;
+  });
+  document.getElementById('curCity').textContent = "📍 "+state.city+" · 切换城市 ▾";
+  if(!list.length){
+    box.innerHTML = '<div class="empty">'+
+      '<div style="font-size:30px">🔍</div>'+
+      '<div style="margin:8px 0"><b>'+state.city+' · '+(state.cat==="全部"?"全品类":state.cat)+' 暂无可显示赛事</b></div>'+
+      '<div id="emptyReason">'+(GAP_REASON[state.cat]||GAP_REASON["全部"])+'</div>'+
+      '<button class="btn sm" id="gapNotify" style="margin-top:12px">有赛通知我</button>　'+
+      '<button class="btn ghost sm" id="gapSubmit">我要找的比赛</button></div>';
+    document.getElementById('gapNotify').onclick=function(){toast("已订阅："+state.city+" 该品类一旦有新赛事会邮件通知你");};
+    document.getElementById('gapSubmit').onclick=function(){toast("已记录你的找赛需求，运营会优先补采");};
+    return;
+  }
+  box.innerHTML = list.map(function(e){
+    return '<div class="ecard"><div class="t1">'+
+      '<span class="ecat">'+e.c+'</span>'+e.n+
+      ' <span class="badge '+e.badge+'">'+e.btxt+'</span></div>'+
+      '<div class="t2"><span>📅 '+e.d+'</span><span>📍 '+e.loc+'</span>'+
+      (e.v?'<span class="verify">✓ 官方已核实</span>':'<span class="unverify">● 信息待核实</span>')+
+      '</div><div class="t2"><span style="color:var(--ink-3)">'+e.note+'</span></div></div>';
+  }).join('');
+}
+
+// 城市 chips
+document.getElementById('cityChips').addEventListener('click',function(ev){
+  var t=ev.target;
+  if(!t.dataset.city){ if(t.classList.contains('chip')) toast("该城市即将开通，可订阅上线提醒"); return; }
+  state.city=t.dataset.city;
+  each(this,'.chip',function(c){c.classList.toggle('on',c.dataset.city===state.city);});
+  render();
+});
+// 品类 chips
+document.getElementById('catChips').addEventListener('click',function(ev){
+  var t=ev.target; if(!t.dataset.cat)return;
+  state.cat=t.dataset.cat;
+  each(this,'.chip',function(c){c.classList.toggle('on',c.dataset.cat===state.cat);});
+  render();
+});
+// 状态 chips（多选）
+document.getElementById('statusChips').addEventListener('click',function(ev){
+  var t=ev.target; if(!t.dataset.st)return;
+  state.sts[t.dataset.st]=!state.sts[t.dataset.st];
+  t.classList.toggle('on',state.sts[t.dataset.st]);
+  render();
+});
+document.getElementById('kw').addEventListener('input',function(ev){
+  state.kw=ev.target.value; render();
+});
+function each(root,sel,fn){Array.prototype.forEach.call(root.querySelectorAll(sel),fn);}
+render();
+
+/* ================= 原型：时间线 ================= */
+var tlNames=["待官宣","报名中","报名截止","开赛","已结束"];
+var tlBadgeCls=["b-wait","b-open","b-closed","b-open","b-end"];
+function setTL(s){
+  var steps=document.querySelectorAll('#tl .tl-step');
+  steps.forEach(function(st,i){
+    st.classList.remove('done','cur');
+    if(i<s) st.classList.add('done');
+    if(i===s) st.classList.add('cur');
+  });
+  var b=document.getElementById('tlBadge');
+  b.textContent=tlNames[s]; b.className="badge "+tlBadgeCls[s];
+}
+document.querySelectorAll('[data-set]').forEach(function(c){
+  c.addEventListener('click',function(){
+    document.querySelectorAll('[data-set]').forEach(function(x){x.classList.remove('on');});
+    c.classList.add('on'); setTL(+c.dataset.set);
+  });
+});
+setTL(0);
+
+/* ================= 原型 B：订阅弹窗 ================= */
+var mask=document.getElementById('mask');
+function openModal(){mask.classList.add('show');document.getElementById('subForm').style.display='';document.getElementById('subOk').style.display='none';document.getElementById('emailErr').style.display='none';document.getElementById('email').value='';}
+function closeModal(){mask.classList.remove('show');}
+document.getElementById('openSub').onclick=openModal;
+document.getElementById('closeMask').onclick=closeModal;
+document.getElementById('cancelSub').onclick=closeModal;
+mask.addEventListener('click',function(e){if(e.target===mask)closeModal();});
+document.getElementById('confirmSub').onclick=function(){
+  var v=document.getElementById('email').value.trim();
+  var ok=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  if(!ok){document.getElementById('emailErr').style.display='';return;}
+  document.getElementById('emailErr').style.display='none';
+  document.getElementById('subForm').style.display='none';
+  document.getElementById('subOk').style.display='';
+  document.getElementById('okMail').textContent='确认邮件已发送至 '+v+'，官宣开报名时将通知该邮箱。';
+};
+document.getElementById('doneSub').onclick=function(){closeModal();toast("订阅成功，可在赛事详情随时取消");};
+
+/* toast */
+var tt;
+function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){t.classList.remove('show');},2400);}
+</script>
+</body>
+</html>
