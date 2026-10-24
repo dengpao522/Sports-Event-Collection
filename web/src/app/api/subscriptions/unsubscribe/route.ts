@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { escapeHtml } from '@/lib/escape-html';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
      <body style="font-family:sans-serif;text-align:center;padding:60px;color:#1f2937">
        <div style="font-size:40px">👋</div>
        <h2>已取消该提醒</h2>
-       <p style="color:#6b7280">今后不会再向 <b>${sub.email}</b> 发送这一提醒。</p>
+       <p style="color:#6b7280">今后不会再向 <b>${escapeHtml(sub.email)}</b> 发送这一提醒。</p>
        <a href="/" style="color:#ea580c">返回全民运动 →</a>
      </body></html>`,
     { headers: { 'Content-Type': 'text/html; charset=utf-8' } },

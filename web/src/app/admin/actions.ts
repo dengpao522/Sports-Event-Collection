@@ -29,6 +29,8 @@ export async function loginAction(formData: FormData) {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
+    // 生产环境（HTTPS 部署）强制仅安全连接传输会话 Cookie，防中间人窃取
+    secure: process.env.NODE_ENV === 'production',
     maxAge: 60 * 60 * 24 * 7, // 7 天免登录
   });
   redirect('/admin');
