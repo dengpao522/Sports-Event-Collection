@@ -13,7 +13,8 @@
     "notify": "tsx scripts/notify.ts",
     "seed:nanjing": "tsx scripts/seed-nanjing.ts",
     "seed:suzhou": "tsx scripts/seed-suzhou.ts",
-    "seed:wuxi": "tsx scripts/seed-wuxi.ts"
+    "seed:wuxi": "tsx scripts/seed-wuxi.ts",
+    "seed:ningbo": "tsx scripts/seed-ningbo.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
