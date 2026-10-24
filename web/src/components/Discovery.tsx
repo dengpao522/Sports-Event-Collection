@@ -26,7 +26,8 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
     closed: false,
   });
   const [kw, setKw] = useState('');
-  const [toast, setToast] = useState('');
+  // “更多即将开通城市”折叠面板
+  const [soonOpen, setSoonOpen] = useState(false);
 
   // 订阅弹窗
   const [modal, setModal] = useState<{ open: boolean; topic: string; req: Record<string, unknown> }>({
@@ -64,11 +65,6 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
     );
   }, [gaps, city, category]);
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(''), 2400);
-  }
-
   return (
     <div>
       {/* 搜索框 */}
@@ -94,17 +90,34 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
             {c}
           </button>
         ))}
-        {SOON_CITIES.map((c) => (
-          <button
-            key={c}
-            onClick={() => showToast(`${c}即将开通，可订阅上线提醒`)}
-            className="cursor-default rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-400"
-            title="MVP 后开通"
-          >
-            {c}·即将开通
-          </button>
-        ))}
+        {/* 江浙沪更多城市：折叠展示，点击城市名订阅开通提醒 */}
+        <button
+          onClick={() => setSoonOpen((v) => !v)}
+          className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-400 hover:border-brand-300 hover:text-brand-600"
+        >
+          {soonOpen ? '收起' : `江浙沪更多城市（${SOON_CITIES.length} 城即将开通）▾`}
+        </button>
       </div>
+      {soonOpen && (
+        <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+          {SOON_CITIES.map((c) => (
+            <button
+              key={c}
+              onClick={() =>
+                setModal({
+                  open: true,
+                  topic: `开通提醒：${c}`,
+                  req: { type: 'CITY_LAUNCH', city: c },
+                })
+              }
+              className="rounded-full border border-dashed border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-500 hover:border-brand-300 hover:text-brand-600"
+              title="订阅开通提醒"
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 品类 */}
       <div className="mt-3 flex flex-wrap gap-2">
@@ -189,12 +202,6 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
         topic={modal.topic}
         subRequest={modal.req as never}
       />
-
-      {toast && (
-        <div className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-gray-900 px-5 py-2.5 text-sm text-white shadow-lg">
-          {toast}
-        </div>
-      )}
     </div>
   );
 }

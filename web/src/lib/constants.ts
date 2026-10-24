@@ -5,7 +5,13 @@
 
 // MVP 开放城市（其余城市展示“即将开通”）
 export const CITIES = ['上海', '杭州'] as const;
-export const SOON_CITIES = ['南京', '苏州', '宁波'] as const;
+// 江浙沪全部地级市（除已开放的上海/杭州）：即将开通，可订阅上线提醒
+export const SOON_CITIES = [
+  // 江苏
+  '南京', '苏州', '无锡', '常州', '徐州', '南通', '连云港', '淮安', '盐城', '扬州', '镇江', '泰州', '宿迁',
+  // 浙江
+  '宁波', '温州', '嘉兴', '湖州', '绍兴', '金华', '衢州', '舟山', '台州', '丽水',
+] as const;
 export type City = (typeof CITIES)[number];
 
 // 一级品类（筛选用，顺序即展示顺序）
