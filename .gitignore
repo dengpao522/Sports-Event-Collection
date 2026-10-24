@@ -1,0 +1,22 @@
+# ===== Office 临时文件 =====
+# Excel/Word 打开时生成的锁文件（~$ 开头）
+~$*
+*.tmp
+
+# ===== Windows 系统垃圾 =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===== 编辑器 / IDE =====
+.vscode/
+.idea/
+*.swp
+
+# ===== Python（如后续加入采集脚本）=====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
