@@ -1,0 +1,139 @@
+'use server';
+
+/**
+ * 运营后台全部 Server Actions（FR-08）
+ * 除登录外，每个动作开头先 requireAdmin() 守卫；
+ * 写操作完成后 revalidate 相关路径，保证前台缓存即时刷新
+ */
+import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { prisma } from '@/lib/prisma';
+import { ADMIN_COOKIE, requireAdmin, sessionTokenFor } from '@/lib/auth';
+import { parseDeadline, parseRaceDate } from '@/lib/parse-date';
+
+/** 登录：校验 ADMIN_PASSWORD，写 7 天会话 Cookie */
+export async function loginAction(formData: FormData) {
+  const expected = process.env.ADMIN_PASSWORD;
+  if (!expected) {
+    redirect(`/admin/login?error=${encodeURIComponent('服务端未配置 ADMIN_PASSWORD，请先在 web/.env 中设置')}`);
+  }
+  const password = String(formData.get('password') ?? '');
+  if (password !== expected) {
+    redirect(`/admin/login?error=${encodeURIComponent('密码不正确')}`);
+  }
+  const jar = await cookies();
+  jar.set(ADMIN_COOKIE, sessionTokenFor(expected), {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 7, // 7 天免登录
+  });
+  redirect('/admin');
+}
+
+/** 退出登录：清除会话 Cookie */
+export async function logoutAction() {
+  const jar = await cookies();
+  jar.delete(ADMIN_COOKIE);
+  redirect('/admin/login');
+}
+
+/**
+ * 新建/编辑赛事（表单 id 为空即新建）。
+ * 日期列保存原文，同时尽力解析出结构化日期（与导入脚本同一套解析逻辑）；
+ * 标签按中英文逗号拆分为 JSON 数组字符串入库。
+ */
+export async function saveEventAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('id') ?? '');
+  const name = String(formData.get('name') ?? '').trim();
+  const city = String(formData.get('city') ?? '').trim();
+  const category = String(formData.get('category') ?? '').trim();
+  const back = id ? `/admin/events/${id}` : '/admin/events/new';
+  if (!name || !city || !category) {
+    redirect(`${back}?error=${encodeURIComponent('赛事名称、城市、品类为必填项')}`);
+  }
+
+  const raceDateText = String(formData.get('raceDateText') ?? '').trim();
+  const deadlineText = String(formData.get('deadlineText') ?? '').trim();
+  const race = parseRaceDate(raceDateText);
+  const deadline = parseDeadline(deadlineText);
+  const tags = JSON.stringify(
+    String(formData.get('tags') ?? '')
+      .split(/[,，]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+
+  const data = {
+    name,
+    city,
+    category,
+    tags,
+    kind: String(formData.get('kind') ?? 'PARTICIPATABLE'),
+    status: String(formData.get('status') ?? 'UNVERIFIED'),
+    verifyStatus: String(formData.get('verifyStatus') ?? 'UNVERIFIED'),
+    raceDateText,
+    raceDateStart: race.start,
+    raceDateEnd: race.end,
+    deadlineText,
+    deadlineAt: deadline,
+    venue: String(formData.get('venue') ?? '').trim(),
+    registerGuide: String(formData.get('registerGuide') ?? '').trim(),
+    registerUrl: String(formData.get('registerUrl') ?? '').trim(),
+    isPublished: formData.get('isPublished') === 'on',
+  };
+
+  if (id) {
+    await prisma.event.update({ where: { id }, data });
+  } else {
+    await prisma.event.create({ data });
+  }
+
+  revalidatePath('/');
+  revalidatePath('/admin');
+  revalidatePath('/admin/events');
+  redirect('/admin/events?saved=1');
+}
+
+/** 上架/下架切换（下架即前台不可见，数据保留） */
+export async function togglePublishAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('id') ?? '');
+  const ev = await prisma.event.findUnique({ where: { id }, select: { isPublished: true } });
+  if (ev) {
+    await prisma.event.update({ where: { id }, data: { isPublished: !ev.isPublished } });
+  }
+  revalidatePath('/');
+  revalidatePath('/admin');
+  revalidatePath('/admin/events');
+}
+
+/** 删除赛事（关联赛事的订阅记录随外键级联删除） */
+export async function deleteEventAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('id') ?? '');
+  if (id) {
+    await prisma.event.delete({ where: { id } });
+  }
+  revalidatePath('/');
+  revalidatePath('/admin');
+  revalidatePath('/admin/events');
+  redirect('/admin/events?deleted=1');
+}
+
+/** 投稿/报错审核：通过或拒绝（仅改状态，内容处理由运营在赛事编辑页完成） */
+export async function reviewSubmissionAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('id') ?? '');
+  const decision = String(formData.get('decision') ?? '');
+  if (id && (decision === 'APPROVED' || decision === 'REJECTED')) {
+    await prisma.submission.update({
+      where: { id },
+      data: { status: decision, reviewedAt: new Date() },
+    });
+  }
+  revalidatePath('/admin/submissions');
+  revalidatePath('/admin');
+}

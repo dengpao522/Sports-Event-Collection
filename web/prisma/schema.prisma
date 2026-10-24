@@ -1,0 +1,124 @@
+// ============================================================
+// 「全民运动」赛事聚合站 MVP 数据模型
+// 设计依据：docs/PRD 第五章，字段与现有赛事清单 Excel 对齐
+// 说明：MVP 使用 SQLite 本地文件（Prisma 在 SQLite 不支持 enum，
+//       故状态类字段用 String，取值在 src/lib/constants.ts 中统一定义；
+//       将来迁 PostgreSQL 时可平滑收敛为 enum）
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- 赛事主表 ----------
+model Event {
+  id    String @id @default(cuid())
+  // 赛事官方名称（含规模/俗称）
+  name  String
+  // 城市：MVP 仅 上海 / 杭州
+  city  String
+  province String @default("")
+
+  // 一级品类（跑步/球类/户外/骑行/水上/冰雪/室内健身/棋牌智力/其他综合）
+  category String
+  // 二级标签（JSON 数组字符串，如 ["半马","元旦"]），保留 Excel 原始品类写法
+  tags     String @default("[]")
+
+  // 日期：raceDateText 为 Excel 原文（如“11月7日（周六）”“待核实”），保证不丢信息
+  raceDateText  String
+  // 尽力解析出的日期，用于排序与状态自动推进；无法解析为 null
+  raceDateStart DateTime?
+  raceDateEnd   DateTime?
+  // 具体地点原文（如“虹口·北外滩国客中心码头”）
+  venue String @default("")
+
+  // 报名状态，取值见 src/lib/constants.ts 的 REG_STATUS（默认待核实）
+  status String @default("UNVERIFIED")
+  // 报名截止原文与解析时间
+  deadlineText String @default("")
+  deadlineAt   DateTime?
+
+  // 报名指引（渠道+操作步骤原文）与可点击外链（若能提取）
+  registerGuide String @default("")
+  registerUrl   String @default("")
+
+  // 信息可信度：VERIFIED / UNVERIFIED
+  verifyStatus String @default("UNVERIFIED")
+  verifiedAt   DateTime?
+  sourceName   String @default("")
+  sourceUrl    String @default("")
+
+  // 赛事性质：PARTICIPATABLE 可报名 / VIEWING 仅观赛 / REFERENCE 历史参考
+  kind String @default("PARTICIPATABLE")
+  // 数据来源类型：MANUAL_COLLECTION 运营采集 / USER_SUBMISSION 用户投稿
+  dataOrigin String @default("MANUAL_COLLECTION")
+  // 来源工作表名（导入溯源）
+  sourceSheet String @default("")
+
+  isPublished Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([city, category, status])
+  @@index([raceDateStart])
+}
+
+// ---------- 邮箱提醒订阅（P0 免注册）----------
+model Subscription {
+  id    String @id @default(cuid())
+  email String
+  // 提醒类型，取值见 src/lib/constants.ts 的 SUB_TYPE：
+  // EVENT_OPEN 开报名 / DEADLINE_24H / DEADLINE_72H / NEXT_YEAR 来年 /
+  // CITY_CATEGORY_NEW 城市×品类新赛 / CITY_LAUNCH 城市开通
+  type  String
+  eventId String?
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  // 城市×品类订阅时使用
+  city     String?
+  category String?
+
+  confirmed Boolean @default(false) // 是否已点击确认邮件（双重确认）
+  confirmToken     String @unique
+  unsubscribeToken String @unique
+  notifiedAt DateTime? // 实际触达时间，防重复发送
+  createdAt DateTime @default(now())
+
+  @@unique([email, type, eventId, city, category])
+}
+
+// ---------- 用户投稿 / 报错 / 找赛需求（FR-06、FR-07）----------
+model Submission {
+  id      String @id @default(cuid())
+  // EVENT_TIP 投稿 / CORRECTION 报错 / FIND_REQUEST 找赛需求
+  type    String
+  // 找赛需求/报错的定位信息
+  city     String @default("")
+  category String @default("")
+  eventId  String?
+  content  String // 用户填写的正文
+  contact  String @default("")
+  // PENDING / APPROVED / REJECTED
+  status   String @default("PENDING")
+  reviewNote String @default("")
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+}
+
+// ---------- 品类空窗说明（城市 × 一级品类，FR-06）----------
+model GapReason {
+  id       String @id @default(cuid())
+  city     String
+  category String // 一级品类；“全部”表示城市级通用说明
+  reason   String // 空窗原因
+  seasonNote String @default("") // 往年档期规律
+  updatedAt DateTime @updatedAt
+
+  @@unique([city, category])
+}

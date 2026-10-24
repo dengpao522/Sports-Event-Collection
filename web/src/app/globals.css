@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* Tailwind v4 主题令牌：品牌色（运动橙），生成 bg-brand-500 等工具类 */
+@theme {
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #f9fafb;
+  color: #1f2937;
+}
+
+/* 卡片 hover 轻微上浮 */
+.event-card {
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.event-card:hover {
+  border-color: var(--color-brand-500);
+  box-shadow: 0 6px 20px rgba(249, 115, 22, 0.12);
+  transform: translateY(-1px);
+}
