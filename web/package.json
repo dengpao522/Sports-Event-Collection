@@ -10,7 +10,8 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "import": "tsx scripts/import-xlsx.ts",
-    "notify": "tsx scripts/notify.ts"
+    "notify": "tsx scripts/notify.ts",
+    "seed:nanjing": "tsx scripts/seed-nanjing.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
