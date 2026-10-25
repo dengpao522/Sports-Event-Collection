@@ -40,13 +40,33 @@ python crawler/collect.py --city 南京 --source zuicool,sogou,bing
 
 ## 定时
 
-Windows 任务计划每天 1 次：
+**推荐**：任务计划每天跑一次轮转模式（分城轮转，单日搜狗请求量降为 1/5，彻底避开频率风控；最酷无风控保持每日全量）：
 
 ```
 程序：python
-参数：D:\Sports Event Data Collection Project\crawler\collect.py --source zuicool,sogou
+参数：D:\Sports Event Data Collection Project\crawler\collect.py --source zuicool,sogou --rotate 5
 起始位置：D:\Sports Event Data Collection Project
 ```
+
+5 天为一个周期覆盖全部 25 城；触发验证码自动跳过当日组、下轮重试，系统自愈。
+
+## 公众号终极方案：微信读书 RSS（推荐部署）
+
+搜狗微信是"够用但不稳"的通道（验证码/IP 风控随频率上升）。**彻底稳定的方案是绕开搜狗**：
+
+1. 部署 [wewe-rss](https://github.com/cooderl/wewe-rss)（开源，`npx` 或 Docker 均可，常驻运行）
+2. 微信扫码登录一次（偶尔续期）
+3. 把 25 城的体育局/赛事/跑团公众号加入订阅 → 每个公众号得到一个 RSS feed 地址
+4. 把 feed 地址逐行填入 `crawler/rss_sources.txt`
+5. 采集器加 `--source rss`（或 `all`）——结构化 XML 零风控，公众号监控永久稳定
+
+此方案跑通后，搜狗源可降级为备用（`--rotate 10` 拉长轮转周期）。
+
+## 搜狗登录 Cookie（可选加码）
+
+浏览器登录搜狗账号后，F12 → 网络 → 任一请求 → 复制完整 Cookie 头，
+存入 `crawler/sogou_cookie.txt`（已被 gitignore）。登录态配额高于匿名会话，验证码概率显著下降。
+Cookie 失效（数月）后重新复制即可。
 
 ## 后台核对流程
 

@@ -35,6 +35,8 @@ from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "web" / "prisma" / "dev.db"
+COOKIE_FILE = Path(__file__).resolve().parent / "sogou_cookie.txt"  # 搜狗登录 Cookie（gitignore，不提交）
+RSS_FILE = Path(__file__).resolve().parent / "rss_sources.txt"  # RSS feed 列表（每行一个 URL）
 
 CITIES = [
     "上海", "杭州", "南京", "苏州", "无锡", "宁波",
@@ -51,6 +53,18 @@ HEADERS = {
 }
 
 REQUEST_INTERVAL = 1.5  # 每次请求间隔（秒），礼貌抓取
+
+# ---------- 轮转 ----------
+
+def rotate_cities(cities: list[str], groups: int) -> list[str]:
+    """分城轮转：按当天在一年中的序号对组数取模，选出今天要采的组。
+    任务计划每天跑一次 --rotate 5 → 单日搜狗请求量降为全量的 1/5，
+    5 天覆盖全部城市，从根本上避开搜狗的频率风控。"""
+    day_index = time.localtime().tm_yday
+    idx = day_index % groups
+    picked = cities[idx::groups]
+    log(f"[轮转] 今天采第 {idx + 1}/{groups} 组：{'、'.join(picked)}")
+    return picked
 
 # ---------- 工具 ----------
 
@@ -167,9 +181,16 @@ SOGOU_KEYWORDS = ["马拉松 报名", "赛事 报名", "越野 报名", "联赛 
 
 
 def new_sogou_session() -> requests.Session:
-    """建立搜狗会话：预热拿 ABTEST/SUID cookie，可显著降低验证码概率（实测 3 城连续零拦截）"""
+    """建立搜狗会话：预热拿 ABTEST/SUID cookie；若配置了登录 Cookie 文件
+    （浏览器登录搜狗后 F12 复制整串 Cookie 存入 crawler/sogou_cookie.txt），
+    注入后享有登录态配额，验证码概率大幅降低。"""
     s = requests.Session()
     s.headers.update({**HEADERS, "Referer": "https://weixin.sogou.com/"})
+    if COOKIE_FILE.exists():
+        cookie_str = COOKIE_FILE.read_text(encoding="utf-8").strip()
+        if cookie_str:
+            s.headers["Cookie"] = cookie_str
+            log("    [sogou] 已注入登录 Cookie")
     try:
         s.get("https://weixin.sogou.com/", timeout=20)
     except Exception as e:
@@ -262,6 +283,70 @@ def collect_sogou_weixin(cities: list[str]) -> list[dict]:
     return leads
 
 
+# ---------- 数据源 3：RSS 订阅（微信读书/wewe-rss 方案，公众号彻底稳定通道） ----------
+
+def collect_rss() -> list[dict]:
+    """抓取 rss_sources.txt 中配置的 RSS/Atom feed（来自自部署 wewe-rss / RSSHub）。
+    部署一次微信读书扫码后，订阅的公众号有新文章即自动进入此通道——
+    零风控、零验证码，是公众号监控的终极稳定方案。部署指引见 crawler/README.md。"""
+    import xml.etree.ElementTree as ET
+
+    if not RSS_FILE.exists():
+        log("  [rss] 未配置 rss_sources.txt，跳过（部署指引见 crawler/README.md）")
+        return []
+    feeds = [ln.strip() for ln in RSS_FILE.read_text(encoding="utf-8").splitlines() if ln.strip() and not ln.startswith("#")]
+    if not feeds:
+        log("  [rss] rss_sources.txt 为空，跳过")
+        return []
+
+    leads: list[dict] = []
+    for feed_url in feeds:
+        html = fetch(feed_url)
+        if not html:
+            continue
+        try:
+            root = ET.fromstring(html)
+        except Exception as e:
+            log(f"    [rss] XML 解析失败: {type(e).__name__}")
+            continue
+        count = 0
+        # RSS 2.0（<item>）与 Atom（<entry>）双格式兼容
+        ns = {"atom": "http://www.w3.org/2005/Atom"}
+        items = root.findall(".//item") or root.findall(".//atom:entry", ns)
+        for item in items:
+            title_el = item.find("title")
+            link_el = item.find("link")
+            desc_el = item.find("description") or item.find("atom:summary", ns)
+            title = (title_el.text or "").strip() if title_el is not None else ""
+            link = (link_el.text or "").strip() if link_el is not None else ""
+            if link_el is None:
+                link_alt = item.find("atom:link", ns)
+                link = link_alt.get("href", "") if link_alt is not None else ""
+            summary = (desc_el.text or "").strip() if desc_el is not None else ""
+            summary = re.sub(r"<[^>]+>", " ", summary)[:200]
+            if not title or not link:
+                continue
+            if is_stale_article(title, summary):
+                continue
+            if not is_sport_article(title, summary):
+                continue
+            # 城市：从标题匹配 25 城名单，匹配不到留空由人工补
+            city = next((c for c in CITIES if c in title), "")
+            leads.append({
+                "source": "rss",
+                "city": city,
+                "name": title,
+                "status_label": "公众号推文（RSS）",
+                "date_text": "",
+                "venue": summary,
+                "url": link,
+            })
+            count += 1
+        log(f"  [rss] {feed_url[:60]}: {count} 条")
+        time.sleep(REQUEST_INTERVAL)
+    return leads
+
+
 # ---------- 去重与入库 ----------
 
 def load_existing() -> tuple[set[str], set[str]]:
@@ -323,18 +408,24 @@ def save_leads(leads: list[dict], existing_names: set[str], existing_urls: set[s
 def main() -> None:
     parser = argparse.ArgumentParser(description="赛事线索采集器")
     parser.add_argument("--city", help="只采集指定城市")
-    parser.add_argument("--source", default="zuicool", help="数据源：zuicool / sogou / all（默认 zuicool）")
+    parser.add_argument("--source", default="zuicool", help="数据源：zuicool / sogou / rss / all（默认 zuicool）")
+    parser.add_argument("--rotate", type=int, default=0, help="分城轮转组数（如 5 = 每天采 1/5 的城市），仅作用于搜狗等风控敏感源")
     args = parser.parse_args()
 
     cities = [args.city] if args.city else CITIES
     sources = args.source.split(",")
+
+    # 轮转模式：风控敏感源（sogou）只采当日组；zuicool 无风控保持全量
+    sogou_cities = rotate_cities(cities, args.rotate) if args.rotate > 0 else cities
 
     log(f"开始采集：{len(cities)} 城 × 数据源 [{args.source}]")
     leads: list[dict] = []
     if "zuicool" in sources or "all" in sources:
         leads += collect_zuicool(cities)
     if "sogou" in sources or "all" in sources:
-        leads += collect_sogou_weixin(cities)
+        leads += collect_sogou_weixin(sogou_cities)
+    if "rss" in sources or "all" in sources:
+        leads += collect_rss()
 
     log(f"\n共抓取线索 {len(leads)} 条，开始去重入库…")
     existing_names, existing_urls = load_existing()

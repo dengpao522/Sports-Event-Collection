@@ -1,0 +1,7 @@
+# RSS 订阅源列表（每行一个 feed URL，# 开头为注释）
+# 来源推荐：自部署 wewe-rss（微信读书方案）后，为每个赛事公众号生成一个 feed
+# 部署指引见 crawler/README.md 第「公众号终极方案」节
+#
+# 示例（部署后替换为你的地址）：
+# http://localhost:4000/feeds/南京体育.all.xml
+# http://localhost:4000/feeds/汇跑赛事.all.xml
