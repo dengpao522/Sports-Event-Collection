@@ -1,2 +1,5 @@
 # 搜狗登录 Cookie（敏感信息，不入库）
 sogou_cookie.txt
+
+# wewe-rss Docker 数据卷（本地运行数据，不入库）
+wewe-rss-data/

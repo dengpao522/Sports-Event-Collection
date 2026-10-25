@@ -37,6 +37,21 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
     req: {},
   });
 
+  // 动态城市：库内已有已发布赛事、但不在 CITIES 常量里的城市（全国采集新增）自动出现
+  const baseCities: readonly string[] = CITIES;
+  const extraCities = useMemo(
+    () =>
+      Array.from(new Set(events.map((e) => e.city).filter(Boolean))).filter(
+        (c) => !baseCities.includes(c),
+      ),
+    [events, baseCities],
+  );
+  // 「即将开通」池：排除常量城市与已动态开通的城市，避免重复
+  const soonCities = useMemo(
+    () => SOON_CITIES.filter((c) => !baseCities.includes(c) && !extraCities.includes(c)),
+    [extraCities, baseCities],
+  );
+
   const allowedStatuses = useMemo(
     () => STATUS_GROUPS.filter((g) => groups[g.key]).flatMap((g) => g.statuses),
     [groups],
@@ -76,9 +91,9 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
         className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
       />
 
-      {/* 城市 */}
+      {/* 城市：常量城市 + 全国采集动态开通的城市 */}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        {CITIES.map((c) => (
+        {[...CITIES, ...extraCities].map((c) => (
           <button
             key={c}
             onClick={() => setCity(c)}
@@ -92,12 +107,12 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
           </button>
         ))}
         {/* 全国更多城市：折叠展示，支持搜索，点击城市名订阅开通提醒 */}
-        {SOON_CITIES.length > 0 && (
+        {soonCities.length > 0 && (
           <button
             onClick={() => setSoonOpen((v) => !v)}
             className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-400 hover:border-brand-300 hover:text-brand-600"
           >
-            {soonOpen ? '收起' : `全国更多城市（${SOON_CITIES.length} 城即将开通）▾`}
+            {soonOpen ? '收起' : `全国更多城市（${soonCities.length} 城即将开通）▾`}
           </button>
         )}
       </div>
@@ -106,11 +121,11 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
           <input
             value={soonFilter}
             onChange={(e) => setSoonFilter(e.target.value)}
-            placeholder={`搜索城市，如：成都、厦门（共 ${SOON_CITIES.length} 城）`}
+            placeholder={`搜索城市，如：拉萨、乌鲁木齐（共 ${soonCities.length} 城）`}
             className="mb-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
           />
           <div className="flex flex-wrap gap-1.5">
-            {SOON_CITIES.filter((c) => !soonFilter.trim() || c.includes(soonFilter.trim())).map((c) => (
+            {soonCities.filter((c) => !soonFilter.trim() || c.includes(soonFilter.trim())).map((c) => (
               <button
                 key={c}
                 onClick={() =>
@@ -126,7 +141,7 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
                 {c}
               </button>
             ))}
-            {SOON_CITIES.filter((c) => c.includes(soonFilter.trim())).length === 0 && (
+            {soonCities.filter((c) => c.includes(soonFilter.trim())).length === 0 && (
               <span className="px-2 py-1 text-xs text-gray-400">未找到该城市，可直接在上方搜索赛事试试</span>
             )}
           </div>

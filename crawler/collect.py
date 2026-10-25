@@ -44,6 +44,38 @@ CITIES = [
     "温州", "嘉兴", "湖州", "绍兴", "金华", "衢州", "舟山", "台州", "丽水",
 ]
 
+# 全国其余地级行政区（与 web/src/lib/constants.ts SOON_CITIES 同步维护）
+SOON_CITIES = [
+    "北京", "天津", "重庆",
+    "石家庄", "唐山", "秦皇岛", "邯郸", "邢台", "保定", "张家口", "承德", "沧州", "廊坊", "衡水",
+    "太原", "大同", "阳泉", "长治", "晋城", "朔州", "晋中", "运城", "忻州", "临汾", "吕梁",
+    "呼和浩特", "包头", "乌海", "赤峰", "通辽", "鄂尔多斯", "呼伦贝尔", "巴彦淖尔", "乌兰察布", "兴安盟", "锡林郭勒盟", "阿拉善盟",
+    "沈阳", "大连", "鞍山", "抚顺", "本溪", "丹东", "锦州", "营口", "阜新", "辽阳", "盘锦", "铁岭", "朝阳", "葫芦岛",
+    "长春", "吉林", "四平", "辽源", "通化", "白山", "松原", "白城", "延边",
+    "哈尔滨", "齐齐哈尔", "鸡西", "鹤岗", "双鸭山", "大庆", "伊春", "佳木斯", "七台河", "牡丹江", "黑河", "绥化", "大兴安岭",
+    "合肥", "芜湖", "蚌埠", "淮南", "马鞍山", "淮北", "铜陵", "安庆", "黄山", "滁州", "阜阳", "宿州", "六安", "亳州", "池州", "宣城",
+    "福州", "厦门", "莆田", "三明", "泉州", "漳州", "南平", "龙岩", "宁德",
+    "南昌", "景德镇", "萍乡", "九江", "新余", "鹰潭", "赣州", "吉安", "宜春", "抚州", "上饶",
+    "济南", "青岛", "淄博", "枣庄", "东营", "烟台", "潍坊", "济宁", "泰安", "威海", "日照", "临沂", "德州", "聊城", "滨州", "菏泽",
+    "郑州", "开封", "洛阳", "平顶山", "安阳", "鹤壁", "新乡", "焦作", "濮阳", "许昌", "漯河", "三门峡", "南阳", "商丘", "信阳", "周口", "驻马店",
+    "武汉", "黄石", "十堰", "宜昌", "襄阳", "鄂州", "荆门", "孝感", "荆州", "黄冈", "咸宁", "随州", "恩施",
+    "长沙", "株洲", "湘潭", "衡阳", "邵阳", "岳阳", "常德", "张家界", "益阳", "郴州", "永州", "怀化", "娄底", "湘西",
+    "广州", "深圳", "珠海", "汕头", "佛山", "韶关", "湛江", "茂名", "肇庆", "惠州", "梅州", "汕尾", "河源", "阳江", "清远", "东莞", "中山", "潮州", "揭阳", "云浮",
+    "南宁", "柳州", "桂林", "梧州", "北海", "防城港", "钦州", "贵港", "玉林", "百色", "贺州", "河池", "来宾", "崇左",
+    "海口", "三亚", "三沙", "儋州",
+    "成都", "自贡", "攀枝花", "泸州", "德阳", "绵阳", "广元", "遂宁", "内江", "乐山", "南充", "眉山", "宜宾", "广安", "达州", "雅安", "巴中", "资阳", "阿坝", "甘孜", "凉山",
+    "贵阳", "六盘水", "遵义", "安顺", "毕节", "铜仁", "黔东南", "黔南", "黔西南",
+    "昆明", "曲靖", "玉溪", "保山", "昭通", "丽江", "普洱", "临沧", "楚雄", "红河", "文山", "西双版纳", "大理", "德宏", "怒江", "迪庆",
+    "拉萨", "日喀则", "昌都", "林芝", "山南", "那曲", "阿里",
+    "西安", "铜川", "宝鸡", "咸阳", "渭南", "延安", "汉中", "榆林", "安康", "商洛",
+    "兰州", "嘉峪关", "金昌", "白银", "天水", "武威", "张掖", "平凉", "酒泉", "庆阳", "定西", "陇南", "临夏", "甘南",
+    "西宁", "海东", "海北", "黄南", "海南州", "果洛", "玉树", "海西",
+    "银川", "石嘴山", "吴忠", "固原", "中卫",
+    "乌鲁木齐", "克拉玛依", "吐鲁番", "哈密", "昌吉", "博尔塔拉", "巴音郭楞", "阿克苏", "克孜勒苏", "喀什", "和田", "伊犁", "塔城", "阿勒泰",
+]
+
+ALL_CITIES = CITIES + SOON_CITIES
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -347,7 +379,168 @@ def collect_rss() -> list[dict]:
     return leads
 
 
-# ---------- 去重与入库 ----------
+# ---------- 数据源 4：全国全量（最酷首页，直接入库 Event） ----------
+
+# 状态标签 → 库内状态映射
+ZUICOOL_STATUS_MAP = {"报名中": "OPEN", "已截止": "CLOSED", "已结束": "FINISHED", "已关闭": "CLOSED"}
+NATIONWIDE_SHEET = "最酷全国采集 2026-10-26"
+
+
+def infer_city_from_venue(venue: str) -> str:
+    """从最酷地点行（如「浙江・温州市苍南县・xxx」）推断地级市名，
+    优先匹配库内已知城市名单（含 SOON），匹配不到取「・」分隔的第二段。"""
+    for c in ALL_CITIES:
+        if c in venue:
+            return c
+    segs = venue.replace("浙江・", "").replace("江苏・", "").replace("上海・", "").split("・")
+    if len(segs) >= 2:
+        return segs[1].replace("市", "")
+    return ""
+
+
+# ---------- 中文日期解析（Python 版，与 web 端 parse-date.ts 口径一致） ----------
+
+def parse_race_date_cn(text: str):
+    """解析「2026年11月7日星期六」等，返回 ISO 字符串（Prisma DateTime 兼容）或 None。
+    年份规则与 web 端一致：月份 1-2 月视为跨年归到下一年。"""
+    if not text:
+        return None
+    m = re.search(r"(20\d{2})年(\d{1,2})月(\d{1,2})日", text)
+    if not m:
+        return None
+    year, month, day = int(m[1]), int(m[2]), int(m[3])
+    if month <= 2 and year < 2027:
+        year += 1
+    try:
+        return f"{year:04d}-{month:02d}-{day:02d}T00:00:00.000Z"
+    except ValueError:
+        return None
+
+
+def parse_deadline_cn(text: str):
+    """从截止文本解析 ISO datetime（含 HH:MM 则带时间），失败返回 None"""
+    if not text:
+        return None
+    m = re.search(r"(20\d{2})年(\d{1,2})月(\d{1,2})日(?:\s*(\d{1,2})[:：](\d{2}))?", text)
+    if not m:
+        return None
+    year, month, day = int(m[1]), int(m[2]), int(m[3])
+    hour = int(m[4]) if m[4] else 23
+    minute = int(m[5]) if m[5] else 59
+    try:
+        return f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:00.000Z"
+    except ValueError:
+        return None
+
+
+def sport_category(name: str) -> str:
+    """从赛事名推断一级品类（与网站品类体系一致）"""
+    if any(k in name for k in ("越野", "山径", "跑山", "山地")):
+        return "跑步"  # 越野跑归跑步大类
+    if any(k in name for k in ("马拉松", "路跑", "10公里", "10KM", "健康跑", "亲子跑", "欢乐跑", "半马", "全马", "迎新跑")):
+        return "跑步"
+    if any(k in name for k in ("骑行", "自行车", "骑游")):
+        return "骑行"
+    if any(k in name for k in ("徒步", "登山", "毅行", "登高")):
+        return "户外"
+    if any(k in name for k in ("游泳", "桨板", "赛艇", "皮划艇")):
+        return "水上"
+    if any(k in name for k in ("滑雪", "冰雪")):
+        return "冰雪"
+    if any(k in name for k in ("定向", "障碍赛", "斯巴达")):
+        return "其他综合"
+    return "其他综合"
+
+
+def collect_zuicool_nationwide() -> list[dict]:
+    """最酷全国首页：一次性抓取全国所有「报名中/已截止」赛事，直接返回结构化数据。
+    与线索模式不同：本源字段完整（名称/日期/地点/状态），可直接入库为 Event。"""
+    leads: list[dict] = []
+    html = fetch("https://reg.zuicool.com/")
+    if not html:
+        return leads
+    soup = BeautifulSoup(html, "lxml")
+    for b in soup.select(".reg-race-block"):
+        a = b.select_one("a.race-name-a")
+        h4 = a.select_one("h4") if a else None
+        if not a or not h4:
+            continue
+        span = h4.select_one("span.label")
+        status_label = span.get_text(strip=True) if span else ""
+        name = h4.get_text(strip=True)
+        if span:
+            name = name.replace(span.get_text(strip=True), "").strip()
+        if not name:
+            continue
+        ps = b.find_all("p")
+        info = ps[-1].get_text(" ", strip=True) if ps else ""
+        m = re.search(r"(\d{4}年\d{1,2}月\d{1,2}日[^・]*)", info)
+        date_text = m.group(1).strip(" ~") if m else ""
+        vm = re.search(r"((?:浙江|江苏|上海|北京|天津|重庆|安徽|福建|江西|山东|河南|湖北|湖南|广东|广西|海南|四川|贵州|云南|西藏|陕西|甘肃|青海|宁夏|新疆|内蒙古|辽宁|吉林|黑龙江|山西|河北)・[^・]+(?:・[^・]+)?)", info)
+        venue = vm.group(1) if vm else ""
+        city = infer_city_from_venue(venue)
+        leads.append({
+            "name": name,
+            "status_label": status_label,
+            "status": ZUICOOL_STATUS_MAP.get(status_label, "UNVERIFIED"),
+            "date_text": date_text,
+            "venue": venue,
+            "city": city,
+            "category": sport_category(name),
+            "registerGuide": f"最酷报名平台一键报名：{a.get('href', '')}",
+            "source": "zuicool_nationwide",
+            "url": a.get("href", ""),
+        })
+    log(f"  [zuicool 全国] {len(leads)} 条（含状态分布：{ {k: sum(1 for l in leads if l['status_label']==k) for k in set(l['status_label'] for l in leads)} }）")
+    return leads
+
+
+def save_nationwide_events(leads: list[dict]) -> tuple[int, int]:
+    """全国赛事直接入库 Event（城市+赛事名幂等），返回 (新增, 更新)。
+    入库口径：isPublished、verifyStatus=UNVERIFIED（平台状态可信但需人工抽查）。"""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cur = conn.cursor()
+        existing_keys = {
+            (r[0], normalize_name(r[1])) for r in cur.execute("SELECT city, name FROM Event")
+        }
+        inserted = updated = 0
+        for e in leads:
+            race = parse_race_date_cn(e["date_text"])
+            deadline = parse_deadline_cn(e["date_text"])
+            key = (e["city"], normalize_name(e["name"]))
+            if key in existing_keys:
+                cur.execute(
+                    "UPDATE Event SET name=?, category=?, raceDateText=?, raceDateStart=?, raceDateEnd=?,"
+                    " venue=?, status=?, deadlineAt=?, registerGuide=?, registerUrl=?,"
+                    " updatedAt=datetime('now')"
+                    " WHERE city=? AND name=?",
+                    (e["name"], e["category"], e["date_text"] or "时间待定", race, deadline,
+                     e["venue"], e["status"], deadline, e["registerGuide"], e["url"],
+                     e["city"], e["name"]),
+                )
+                updated += 1
+            else:
+                cur.execute(
+                    "INSERT INTO Event (id, name, city, province, category, tags, raceDateText, raceDateStart,"
+                    " raceDateEnd, venue, status, deadlineText, deadlineAt, registerGuide, registerUrl,"
+                    " verifyStatus, verifiedAt, kind, dataOrigin, sourceName, sourceSheet, isPublished,"
+                    " createdAt, updatedAt)"
+                    " VALUES (?, ?, ?, '', ?, '[]', ?, ?, ?, ?, ?, '', ?, ?, ?, 'UNVERIFIED', NULL,"
+                    " 'PARTICIPATABLE', 'MANUAL_COLLECTION', ?, ?, 1, datetime('now'), datetime('now'))",
+                    (
+                        uuid.uuid4().hex, e["name"], e["city"], e["category"],
+                        e["date_text"] or "时间待定", race, deadline,
+                        e["venue"], e["status"], deadline, e["registerGuide"], e["url"],
+                        e["source"], NATIONWIDE_SHEET,
+                    ),
+                )
+                inserted += 1
+                existing_keys.add(key)
+        conn.commit()
+        return inserted, updated
+    finally:
+        conn.close()
 
 def load_existing() -> tuple[set[str], set[str]]:
     """读库内赛事名集合 + 已有线索的来源 URL 集合"""
@@ -408,7 +601,7 @@ def save_leads(leads: list[dict], existing_names: set[str], existing_urls: set[s
 def main() -> None:
     parser = argparse.ArgumentParser(description="赛事线索采集器")
     parser.add_argument("--city", help="只采集指定城市")
-    parser.add_argument("--source", default="zuicool", help="数据源：zuicool / sogou / rss / all（默认 zuicool）")
+    parser.add_argument("--source", default="zuicool", help="数据源：zuicool / sogou / rss / nationwide / all（默认 zuicool）")
     parser.add_argument("--rotate", type=int, default=0, help="分城轮转组数（如 5 = 每天采 1/5 的城市），仅作用于搜狗等风控敏感源")
     args = parser.parse_args()
 
@@ -431,6 +624,14 @@ def main() -> None:
     existing_names, existing_urls = load_existing()
     inserted, dup_event, dup_lead = save_leads(leads, existing_names, existing_urls)
     log(f"完成：新增线索 {inserted} 条（与库内赛事重复跳过 {dup_event}，重复线索跳过 {dup_lead}）")
+
+    if "nationwide" in sources:
+        log("\n[全国模式] 抓取最酷全国列表并直接入库…")
+        events = collect_zuicool_nationwide()
+        ins, upd = save_nationwide_events(events)
+        log(f"[全国模式] 入库完成：新增赛事 {ins}，更新 {upd}")
+        print("\n全国赛事已入库（isPublished，待人工抽查），前台刷新即可见。")
+
     log("请到后台 /admin/submissions 核对「采集线索」，确认后正式录入赛事。")
     sys.exit(0)
 
