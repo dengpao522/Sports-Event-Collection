@@ -26,8 +26,9 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
     closed: false,
   });
   const [kw, setKw] = useState('');
-  // “更多即将开通城市”折叠面板
+  // “更多即将开通城市”折叠面板与站内搜索
   const [soonOpen, setSoonOpen] = useState(false);
+  const [soonFilter, setSoonFilter] = useState('');
 
   // 订阅弹窗
   const [modal, setModal] = useState<{ open: boolean; topic: string; req: Record<string, unknown> }>({
@@ -90,34 +91,45 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
             {c}
           </button>
         ))}
-        {/* 江浙沪更多城市：仅当存在待开通城市时展示（当前已全覆盖） */}
+        {/* 全国更多城市：折叠展示，支持搜索，点击城市名订阅开通提醒 */}
         {SOON_CITIES.length > 0 && (
           <button
             onClick={() => setSoonOpen((v) => !v)}
             className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-400 hover:border-brand-300 hover:text-brand-600"
           >
-            {soonOpen ? '收起' : `江浙沪更多城市（${SOON_CITIES.length} 城即将开通）▾`}
+            {soonOpen ? '收起' : `全国更多城市（${SOON_CITIES.length} 城即将开通）▾`}
           </button>
         )}
       </div>
       {soonOpen && (
-        <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
-          {SOON_CITIES.map((c) => (
-            <button
-              key={c}
-              onClick={() =>
-                setModal({
-                  open: true,
-                  topic: `开通提醒：${c}`,
-                  req: { type: 'CITY_LAUNCH', city: c },
-                })
-              }
-              className="rounded-full border border-dashed border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-500 hover:border-brand-300 hover:text-brand-600"
-              title="订阅开通提醒"
-            >
-              {c}
-            </button>
-          ))}
+        <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+          <input
+            value={soonFilter}
+            onChange={(e) => setSoonFilter(e.target.value)}
+            placeholder={`搜索城市，如：成都、厦门（共 ${SOON_CITIES.length} 城）`}
+            className="mb-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          />
+          <div className="flex flex-wrap gap-1.5">
+            {SOON_CITIES.filter((c) => !soonFilter.trim() || c.includes(soonFilter.trim())).map((c) => (
+              <button
+                key={c}
+                onClick={() =>
+                  setModal({
+                    open: true,
+                    topic: `开通提醒：${c}`,
+                    req: { type: 'CITY_LAUNCH', city: c },
+                  })
+                }
+                className="rounded-full border border-dashed border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-500 hover:border-brand-300 hover:text-brand-600"
+                title="订阅开通提醒"
+              >
+                {c}
+              </button>
+            ))}
+            {SOON_CITIES.filter((c) => c.includes(soonFilter.trim())).length === 0 && (
+              <span className="px-2 py-1 text-xs text-gray-400">未找到该城市，可直接在上方搜索赛事试试</span>
+            )}
+          </div>
         </div>
       )}
 

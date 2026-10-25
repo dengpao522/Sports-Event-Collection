@@ -33,25 +33,6 @@ export interface AutocheckSummary {
   remaining: number;
 }
 
-/** 搜狗中转链接 → 微信文章真实 URL（中转页用 JS 片段拼接跳转地址） */
-async function resolveSogouLink(sogouUrl: string): Promise<string | null> {
-  const r = await fetch(sogouUrl, { headers: UA, redirect: "follow" });
-  if (!r.ok) return null;
-  const html = await r.text();
-  // 已直接跳到微信文章（部分中转支持 302/follow）
-  if (r.url.includes("mp.weixin.qq.com")) return r.url.split("#")[0];
-  // JS 拼接：url += '片段';
-  const parts = [...html.matchAll(/url\s*\+=\s*'([^']*)'/g)].map((m) => m[1]);
-  if (parts.length) {
-    const joined = parts.join("");
-    if (joined.includes("mp.weixin.qq.com")) return joined;
-  }
-  // 单片段形式 url = '完整地址'
-  const single = html.match(/url\s*=\s*'(https?:\/\/[^']*)'/);
-  if (single && single[1].includes("mp.weixin.qq.com")) return single[1];
-  return null;
-}
-
 interface ArticleInfo {
   title: string;
   publishTime: Date | null;

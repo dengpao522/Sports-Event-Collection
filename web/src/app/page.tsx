@@ -50,8 +50,9 @@ export default async function HomePage() {
             找一场你能参加的比赛 🏃
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-gray-600">
-            我们把江浙沪 25 城大众可报名的运动赛事聚到一处，按城市和运动品类筛选，
-            报名开启与截止前邮件提醒你，不再错过报名窗口。已覆盖全部 25 城，数据持续更新。
+            我们把全国大众可报名的运动赛事聚到一处，按城市和运动品类筛选，
+            报名开启与截止前邮件提醒你，不再错过报名窗口。已覆盖江浙沪 25 城，
+            全国 300+ 城市可订阅开通提醒，数据持续扩展中。
           </p>
           <div className="mt-4 flex gap-5 text-sm font-semibold text-brand-700">
             <span>{cityCount} 个城市</span>
