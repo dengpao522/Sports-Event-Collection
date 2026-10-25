@@ -8,13 +8,16 @@
 
 数据源（按可靠性排序）：
   1. zuicool  最酷报名平台按城市页 —— 结构化最好，路跑/越野主力源
-  2. bing     必应 site:xiaohongshu.com —— 小红书的合规间接覆盖
-  3. sogou    搜狗微信文章搜索 —— 公众号赛事推文（实验性，易出验证码）
+  2. sogou    搜狗微信文章搜索 —— 公众号赛事推文主力源
+             （Session 预热 ABTEST/SUID cookie 后低频连续请求实测稳定；
+              触发验证码时自动跳过本轮，隔天重试）
+  3. bing     必应普通关键词搜索 —— best-effort 补充
+             （实测其中国区自然结果几乎不含小红书/公众号直链，产出有限）
 
 去重：与库内赛事名比对 + 与已有线索的来源 URL 比对，只入新线索。
 运行：在仓库根目录执行  python crawler/collect.py
-      （可选参数 --city 南京 只采一城；--source zuicool,bing 选择数据源）
-定时：Windows 任务计划每天跑一次即可（低频礼貌抓取，间隔 1.5 秒/请求）。
+      （可选参数 --city 南京 只采一城；--source zuicool,sogou,bing 选择数据源）
+定时：Windows 任务计划每天跑一次即可（低频礼貌抓取，间隔 1.5-3 秒/请求）。
 """
 
 import argparse
@@ -145,30 +148,95 @@ def collect_zuicool(cities: list[str]) -> list[dict]:
     return leads
 
 
-# ---------- 数据源 2：必应间接搜小红书 ----------
+# ---------- 数据源 2：搜狗微信文章搜索（公众号主力源） ----------
+
+# 每城查询的关键词组：覆盖路跑与泛赛事两类推文
+SOGOU_KEYWORDS = ["马拉松 报名", "赛事 报名"]
+
+
+def new_sogou_session() -> requests.Session:
+    """建立搜狗会话：预热拿 ABTEST/SUID cookie，可显著降低验证码概率（实测 3 城连续零拦截）"""
+    s = requests.Session()
+    s.headers.update({**HEADERS, "Referer": "https://weixin.sogou.com/"})
+    try:
+        s.get("https://weixin.sogou.com/", timeout=20)
+    except Exception as e:
+        log(f"    [sogou] 预热失败: {type(e).__name__}")
+    return s
+
+
+def collect_sogou_weixin(cities: list[str]) -> list[dict]:
+    """搜狗微信文章搜索：公众号是赛事推文的发布主场，此源直接覆盖"""
+    leads: list[dict] = []
+    s = new_sogou_session()
+    blocked_once = False
+    for city in cities:
+        if blocked_once:
+            break  # 验证码出现后同会话继续必被拦，直接结束本轮
+        for kw in SOGOU_KEYWORDS:
+            url = f"https://weixin.sogou.com/weixin?type=2&query={city}+{kw}"
+            html = fetch(url)
+            if html is None:
+                continue
+            if "antispider" in html or "验证码" in html[:3000]:
+                log(f"  [sogou] {city}: 触发验证码，本轮搜狗源提前结束（建议隔天再跑）")
+                blocked_once = True
+                break
+            soup = BeautifulSoup(html, "lxml")
+            count = 0
+            # 页面结构：div.news-box > ul.news-list > li（每 li 一篇，标题链接 id 以 sogou_vr_ 开头）
+            for li in soup.select("ul.news-list > li"):
+                a = li.select_one('a[id^="sogou_vr"]') or li.select_one("h3 a")
+                if not a:
+                    continue
+                title = a.get_text(strip=True)
+                href = a.get("href", "")
+                if href.startswith("/link"):
+                    href = f"https://weixin.sogou.com{href}"
+                # 摘要与日期/来源行
+                snippet = li.select_one(".txt-info")
+                date_el = li.select_one(".s2") or li.select_one("p.news-from")
+                snippet_text = snippet.get_text(strip=True)[:200] if snippet else ""
+                date_text = date_el.get_text(" ", strip=True) if date_el else ""
+                leads.append({
+                    "source": "sogou_weixin",
+                    "city": city if city in title else "",
+                    "name": title,
+                    "status_label": "公众号推文",
+                    "date_text": date_text[:80],
+                    "venue": snippet_text,
+                    "url": href,
+                })
+                count += 1
+            log(f"  [sogou] {city}（{kw}）: {count} 条")
+            time.sleep(REQUEST_INTERVAL * 2)
+    return leads
+
+
+# ---------- 数据源 3：必应普通关键词搜索（best-effort 补充） ----------
 
 def collect_bing_xhs(cities: list[str]) -> list[dict]:
-    """必应搜索 site:xiaohongshu.com 城市名+报名，作为小红书内容的合规间接覆盖"""
+    """必应普通关键词搜索（如「南京 越野赛 报名」），解码跳转链接后收集非主流站线索。
+    实测其中国区自然结果以官网/主流站为主，小红书/公众号直链命中有限，仅作 best-effort 补充。"""
     leads: list[dict] = []
     for city in cities:
-        url = f"https://cn.bing.com/search?q=site%3Axiaohongshu.com+{city}+%E6%8A%A5%E5%90%8D"
+        url = f"https://www.bing.com/search?q={city}+%E8%B6%8A%E9%87%8E%E8%B5%9B+%E6%8A%A5%E5%90%8D&setmkt=zh-CN"
         html = fetch(url)
         if not html or "验证" in html[:2000]:
             log(f"  [bing] {city}: 被风控或无结果")
             time.sleep(REQUEST_INTERVAL * 2)
             continue
         soup = BeautifulSoup(html, "lxml")
-        for li in soup.select("li.b_algo")[:8]:
+        count = 0
+        for li in soup.select("li.b_algo")[:10]:
             a = li.select_one("h2 a")
             if not a:
                 continue
             title = a.get_text(strip=True)
             href = decode_bing_redirect(a.get("href", ""))
-            if "xiaohongshu.com" not in href:
-                continue
             snippet = li.select_one(".b_caption p")
             leads.append({
-                "source": "bing_xhs",
+                "source": "bing",
                 "city": city if city in title else "",
                 "name": title,
                 "status_label": "待核实",
@@ -176,45 +244,8 @@ def collect_bing_xhs(cities: list[str]) -> list[dict]:
                 "venue": snippet.get_text(strip=True)[:150] if snippet else "",
                 "url": href,
             })
-        log(f"  [bing] {city}: 完成")
-        time.sleep(REQUEST_INTERVAL * 2)  # 搜索引擎抓取间隔加倍
-    return leads
-
-
-# ---------- 数据源 3：搜狗微信文章搜索（实验性） ----------
-
-def collect_sogou_weixin(cities: list[str]) -> list[dict]:
-    """搜狗微信文章搜索：城市+马拉松 报名。易出验证码，失败自动跳过。"""
-    leads: list[dict] = []
-    for city in cities:
-        url = f"https://weixin.sogou.com/weixin?type=2&query={city}+%E9%A9%AC%E6%8B%89%E6%9D%BE+%E6%8A%A5%E5%90%8D"
-        html = fetch(url)
-        if not html:
-            continue
-        if "antispider" in html or "验证码" in html[:3000]:
-            log("  [sogou] 触发验证码，本轮跳过搜狗源（建议隔天再跑）")
-            break
-        soup = BeautifulSoup(html, "lxml")
-        for item in soup.select(".news-box")[:10]:
-            a = item.select_one("h3 a")
-            if not a:
-                continue
-            title = a.get_text(strip=True)
-            # 搜狗为防爬使用中转链接，保留中转 URL 供人工打开
-            href = a.get("href", "")
-            if href.startswith("/link"):
-                href = f"https://weixin.sogou.com{href}"
-            snippet = item.select_one(".txt-info")
-            leads.append({
-                "source": "sogou_weixin",
-                "city": city if city in title else "",
-                "name": title,
-                "status_label": "待核实",
-                "date_text": "",
-                "venue": snippet.get_text(strip=True)[:150] if snippet else "",
-                "url": href,
-            })
-        log(f"  [sogou] {city}: 完成")
+            count += 1
+        log(f"  [bing] {city}: {count} 条")
         time.sleep(REQUEST_INTERVAL * 2)
     return leads
 

@@ -11,6 +11,7 @@ const TYPE_BADGE: Record<string, string> = {
   EVENT_TIP: 'bg-brand-100 text-brand-700',
   CORRECTION: 'bg-red-100 text-red-700',
   FIND_REQUEST: 'bg-blue-100 text-blue-700',
+  CRAWLER_TIP: 'bg-purple-100 text-purple-700',
 };
 
 /** 投稿/报错/找赛审核队列：待审在前，通过/拒绝仅改状态 */

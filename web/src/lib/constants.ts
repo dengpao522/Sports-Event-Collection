@@ -76,5 +76,6 @@ export const SUBMISSION_TYPE = {
   EVENT_TIP: '赛事投稿',
   CORRECTION: '报错修正',
   FIND_REQUEST: '找赛需求',
+  CRAWLER_TIP: '采集线索',
 } as const;
 export type SubmissionTypeKey = keyof typeof SUBMISSION_TYPE;
