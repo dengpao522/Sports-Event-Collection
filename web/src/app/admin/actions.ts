@@ -142,6 +142,40 @@ export async function reviewSubmissionAction(formData: FormData) {
   revalidatePath('/admin');
 }
 
+/** 采集线索自动核对：每批处理 25 条（抓原文+规则评分），多次点击继续剩余 */
+export async function runAutocheckAction() {
+  await requireAdmin();
+  const { autocheckBatch } = await import('@/lib/autocheck');
+  const summary = await autocheckBatch();
+  revalidatePath('/admin/submissions');
+  revalidatePath('/admin');
+  redirect(
+    `/admin/submissions?checked=${summary.checked}&autoPass=${summary.autoPass}` +
+      `&autoReject=${summary.autoReject}&needHuman=${summary.needHuman}&remaining=${summary.remaining}`,
+  );
+}
+
+/** 一键批量审核：按自动核对结果整组通过/拒绝 */
+export async function bulkReviewAction(formData: FormData) {
+  await requireAdmin();
+  const autoStatus = String(formData.get('autoStatus') ?? '');
+  const decision = String(formData.get('decision') ?? '');
+  if (
+    (autoStatus === 'AUTO_PASS' || autoStatus === 'AUTO_REJECT') &&
+    (decision === 'APPROVED' || decision === 'REJECTED')
+  ) {
+    await prisma.submission.updateMany({
+      where: { type: 'CRAWLER_TIP', status: 'PENDING', autoStatus },
+      data: { status: decision, reviewedAt: new Date() },
+    });
+  }
+  revalidatePath('/admin/submissions');
+  revalidatePath('/admin');
+  redirect(
+    `/admin/submissions?bulk=${decision === 'APPROVED' ? 'approved' : 'rejected'}&group=${autoStatus}`,
+  );
+}
+
 /**
  * 后台上传 xlsx 导入清单（与命令行 npm run import 同一套解析逻辑，幂等）
  * 成功后 redirect 到导入页并在 URL 上带统计参数展示报告

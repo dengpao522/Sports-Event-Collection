@@ -177,8 +177,31 @@ def new_sogou_session() -> requests.Session:
     return s
 
 
+def fetch_weixin_summary(article_url: str) -> str:
+    """抓微信文章页公开正文，取前 240 字作为线索增强信息"""
+    try:
+        r = s_get(article_url)
+        m = re.search(r'<div[^>]*id="js_content"[^>]*>([\s\S]*?)<script', r)
+        if not m:
+            return ""
+        text = re.sub(r"<[^>]+>", " ", m.group(1))
+        text = re.sub(r"\s+", " ", text.replace("&nbsp;", " ")).strip()
+        return text[:240]
+    except Exception:
+        return ""
+
+
+def s_get(url: str, timeout: int = 20) -> str:
+    """带 UA 的 GET，返回文本；异常抛出由调用方处理"""
+    r = requests.get(url, headers=HEADERS, timeout=timeout)
+    r.encoding = r.apparent_encoding or "utf-8"
+    return r.text
+
+
 def collect_sogou_weixin(cities: list[str]) -> list[dict]:
-    """搜狗微信文章搜索：公众号是赛事推文的发布主场，此源直接覆盖"""
+    """搜狗微信文章搜索：公众号是赛事推文的发布主场，此源直接覆盖。
+    命中条目当场解析中转链接（会话内有效）拿真实文章 URL 并抓取正文摘要，
+    使后台自动核对无需再访问搜狗。"""
     leads: list[dict] = []
     s = new_sogou_session()
     blocked_once = False
@@ -214,14 +237,24 @@ def collect_sogou_weixin(cities: list[str]) -> list[dict]:
                     continue
                 if not is_sport_article(title, snippet_text):
                     continue  # 非体育赛事（旅游/百科/奥数等噪声）
+
+                # 当场解析中转链接：真实微信文章 URL + 正文摘要（供后台自动核对）
+                real_url = resolve_sogou_link(s, href)
+                body_text = ""
+                final_url = href
+                if real_url:
+                    final_url = real_url
+                    body_text = fetch_weixin_summary(real_url)
+                    time.sleep(REQUEST_INTERVAL)
+
                 leads.append({
                     "source": "sogou_weixin",
                     "city": city if city in title else "",
                     "name": title,
                     "status_label": "公众号推文",
                     "date_text": "",
-                    "venue": snippet_text,
-                    "url": href,
+                    "venue": body_text or snippet_text,  # 优先正文实摘，失败退回搜索摘要
+                    "url": final_url,
                 })
                 count += 1
             log(f"  [sogou] {city}（{kw}）: {count} 条")

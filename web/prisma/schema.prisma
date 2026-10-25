@@ -107,6 +107,10 @@ model Submission {
   // PENDING / APPROVED / REJECTED
   status   String @default("PENDING")
   reviewNote String @default("")
+  // 自动核对结果（FR-08 自我核对）：AUTO_PASS 高置信 / AUTO_REJECT 已过期 / NEED_HUMAN 需人工
+  autoStatus String @default("")
+  autoNote String @default("")
+  autoCheckedAt DateTime?
   createdAt DateTime @default(now())
   reviewedAt DateTime?
 }
