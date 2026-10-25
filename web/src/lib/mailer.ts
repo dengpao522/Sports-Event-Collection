@@ -18,13 +18,27 @@ export interface MailPayload {
   text: string;
 }
 
-/** mock 输出：控制台打印模拟邮件 */
+/** 收件人邮箱脱敏：保留首字符与域名，中间打码（防订阅者 PII 落日志） */
+function maskEmail(email: string): string {
+  const at = email.indexOf('@');
+  if (at <= 0) return '***';
+  return `${email.slice(0, 1)}***${email.slice(at)}`;
+}
+
+/** mock 输出：控制台打印模拟邮件。
+ * 开发环境打印全文便于验证内容；生产环境（如 resend 缺 key 意外降级）
+ * 只打收件人脱敏值与正文长度，防止订阅者邮箱 / 邮件内确认 token 落入日志。 */
 function logMock(payload: MailPayload, reason?: string): void {
+  const isDev = process.env.NODE_ENV !== 'production';
   console.log(`\n📧 [MOCK MAIL]${reason ? `（${reason}）` : ''}未真实发送，内容如下：`);
   console.log('─'.repeat(60));
-  console.log('收件人:', payload.to);
+  console.log('收件人:', isDev ? payload.to : maskEmail(payload.to));
   console.log('主题:', payload.subject);
-  console.log('正文(text):\n', payload.text);
+  if (isDev) {
+    console.log('正文(text):\n', payload.text);
+  } else {
+    console.log(`正文(text): ${payload.text.length} 字符（生产环境不落全文，防 PII/凭证入日志）`);
+  }
   console.log('─'.repeat(60), '\n');
 }
 
