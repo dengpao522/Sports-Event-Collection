@@ -52,6 +52,14 @@ python crawler/collect.py --city 南京 --source zuicool,sogou,bing
 
 ## 公众号终极方案：微信读书 RSS（推荐部署）
 
+> ### 📌 当前部署状态（2026-10-25 记录）
+>
+> - ✅ Docker 容器已部署并运行：`wewe-rss`（SQLite 版，端口 4000，授权码 `quanmin2026`，数据目录 `crawler/wewe-rss-data/`）
+> - ⏸ **卡在扫码绑定**：添加读书账号时二维码接口返回 502（微信读书服务端对当前出口 IP 风控/瞬态错误，容器网络本身连通正常）
+> - **待办（按顺序重试）**：① 重试添加账号（502 可能瞬态）→ ② 电脑连手机热点换出口 IP 后刷新重试 → ③ 隔天再试
+> - **容器管理**：启动 `docker start wewe-rss` / 停止 `docker stop wewe-rss` / 日志 `docker logs wewe-rss --tail 30`
+> - 扫码绑定成功后：添加公众号订阅 → 复制 feed 地址填入 `crawler/rss_sources.txt` → `python crawler/collect.py --source all` 跑通全链路
+
 搜狗微信是"够用但不稳"的通道（验证码/IP 风控随频率上升）。**彻底稳定的方案是绕开搜狗**：
 
 1. 部署 [wewe-rss](https://github.com/cooderl/wewe-rss)（开源，`npx` 或 Docker 均可，常驻运行）
