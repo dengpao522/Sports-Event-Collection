@@ -163,7 +163,7 @@ def collect_zuicool(cities: list[str]) -> list[dict]:
 # ---------- 数据源 2：搜狗微信文章搜索（公众号主力源） ----------
 
 # 每城查询的关键词组：覆盖路跑与泛赛事两类推文
-SOGOU_KEYWORDS = ["马拉松 报名", "赛事 报名"]
+SOGOU_KEYWORDS = ["马拉松 报名", "赛事 报名", "越野 报名", "联赛 报名"]
 
 
 def new_sogou_session() -> requests.Session:
@@ -298,7 +298,7 @@ def main() -> None:
 
     log(f"开始采集：{len(cities)} 城 × 数据源 [{args.source}]")
     leads: list[dict] = []
-    if "zuicool" in sources:
+    if "zuicool" in sources or "all" in sources:
         leads += collect_zuicool(cities)
     if "sogou" in sources or "all" in sources:
         leads += collect_sogou_weixin(cities)
