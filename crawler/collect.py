@@ -21,7 +21,6 @@
 """
 
 import argparse
-import base64
 import re
 import sqlite3
 import sys
@@ -78,18 +77,31 @@ def normalize_name(name: str) -> str:
     return re.sub(r"\s+", "", name).lower()
 
 
-def decode_bing_redirect(href: str) -> str:
-    """必应结果链接是 /ck/a?u=a1<base64> 跳转形式，解出真实 URL"""
-    if "bing.com/ck/a" not in href:
-        return href
-    m = re.search(r"[?&]u=a1([^&]+)", href)
-    if not m:
-        return href
-    raw = m.group(1)
-    try:
-        return base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)).decode("utf-8", "ignore")
-    except Exception:
-        return href
+# 当前有效年份：标题/摘要中出现的年份全都不在此列 → 判定为旧文丢弃
+VALID_YEARS = {"2026", "2027"}
+# 排除词：历史公告类推文（疫情退费/往届回顾等）对“发现新赛”是噪声
+STALE_KEYWORDS = ("疫情", "退费", "退还", "退款", "回顾", "往年")
+# 体育赛事关键词白名单：搜索源的标题/摘要必须至少命中一个，滤除旅游/百科/非体育报名噪声
+SPORT_KEYWORDS = (
+    "马拉松", "路跑", "越野", "骑行", "登山", "徒步", "铁人三项", "游泳",
+    "足球", "篮球", "羽毛球", "网球", "乒乓球", "排球", "跑步", "桨板",
+    "赛艇", "体育", "赛事", "联赛", "田径",
+)
+
+
+def is_stale_article(*texts: str) -> bool:
+    """判断文章是否为无价值的旧文：含旧年份或历史公告关键词"""
+    joined = "".join(texts)
+    years = set(re.findall(r"20\d{2}", joined))
+    if years and not (years & VALID_YEARS):
+        return True  # 提到的年份全是旧的（如 2020/2024）
+    return any(k in joined for k in STALE_KEYWORDS)
+
+
+def is_sport_article(*texts: str) -> bool:
+    """搜索源专用：标题/摘要必须含体育赛事关键词（滤除旅游/百科/奥数等噪声）"""
+    joined = "".join(texts)
+    return any(k in joined for k in SPORT_KEYWORDS)
 
 
 # ---------- 数据源 1：最酷报名平台 ----------
@@ -184,69 +196,36 @@ def collect_sogou_weixin(cities: list[str]) -> list[dict]:
                 break
             soup = BeautifulSoup(html, "lxml")
             count = 0
-            # 页面结构：div.news-box > ul.news-list > li（每 li 一篇，标题链接 id 以 sogou_vr_ 开头）
+            # 页面结构：div.news-box > ul.news-list > li；标题在 h3 > a[id^=sogou_vr_]
             for li in soup.select("ul.news-list > li"):
-                a = li.select_one('a[id^="sogou_vr"]') or li.select_one("h3 a")
+                a = li.select_one("h3 a") or li.select_one('a[id^="sogou_vr"]')
                 if not a:
                     continue
                 title = a.get_text(strip=True)
+                if not title:
+                    continue  # 图片空链接
                 href = a.get("href", "")
                 if href.startswith("/link"):
                     href = f"https://weixin.sogou.com{href}"
-                # 摘要与日期/来源行
+                # 摘要（搜狗无可靠日期行，时效靠年份过滤兜底）
                 snippet = li.select_one(".txt-info")
-                date_el = li.select_one(".s2") or li.select_one("p.news-from")
                 snippet_text = snippet.get_text(strip=True)[:200] if snippet else ""
-                date_text = date_el.get_text(" ", strip=True) if date_el else ""
+                if is_stale_article(title, snippet_text):
+                    continue
+                if not is_sport_article(title, snippet_text):
+                    continue  # 非体育赛事（旅游/百科/奥数等噪声）
                 leads.append({
                     "source": "sogou_weixin",
                     "city": city if city in title else "",
                     "name": title,
                     "status_label": "公众号推文",
-                    "date_text": date_text[:80],
+                    "date_text": "",
                     "venue": snippet_text,
                     "url": href,
                 })
                 count += 1
             log(f"  [sogou] {city}（{kw}）: {count} 条")
             time.sleep(REQUEST_INTERVAL * 2)
-    return leads
-
-
-# ---------- 数据源 3：必应普通关键词搜索（best-effort 补充） ----------
-
-def collect_bing_xhs(cities: list[str]) -> list[dict]:
-    """必应普通关键词搜索（如「南京 越野赛 报名」），解码跳转链接后收集非主流站线索。
-    实测其中国区自然结果以官网/主流站为主，小红书/公众号直链命中有限，仅作 best-effort 补充。"""
-    leads: list[dict] = []
-    for city in cities:
-        url = f"https://www.bing.com/search?q={city}+%E8%B6%8A%E9%87%8E%E8%B5%9B+%E6%8A%A5%E5%90%8D&setmkt=zh-CN"
-        html = fetch(url)
-        if not html or "验证" in html[:2000]:
-            log(f"  [bing] {city}: 被风控或无结果")
-            time.sleep(REQUEST_INTERVAL * 2)
-            continue
-        soup = BeautifulSoup(html, "lxml")
-        count = 0
-        for li in soup.select("li.b_algo")[:10]:
-            a = li.select_one("h2 a")
-            if not a:
-                continue
-            title = a.get_text(strip=True)
-            href = decode_bing_redirect(a.get("href", ""))
-            snippet = li.select_one(".b_caption p")
-            leads.append({
-                "source": "bing",
-                "city": city if city in title else "",
-                "name": title,
-                "status_label": "待核实",
-                "date_text": "",
-                "venue": snippet.get_text(strip=True)[:150] if snippet else "",
-                "url": href,
-            })
-            count += 1
-        log(f"  [bing] {city}: {count} 条")
-        time.sleep(REQUEST_INTERVAL * 2)
     return leads
 
 
@@ -288,7 +267,9 @@ def save_leads(leads: list[dict], existing_names: set[str], existing_urls: set[s
             if lead["date_text"]:
                 lines.append(f"时间：{lead['date_text']}")
             if lead["venue"]:
-                lines.append(f"地点：{lead['venue']}")
+                # zuicool 的该字段是真实地点，搜索源（sogou/bing）是文章摘要
+                label = "地点" if lead["source"] == "zuicool" else "摘要"
+                lines.append(f"{label}：{lead['venue']}")
             if lead["status_label"]:
                 lines.append(f"平台状态：{lead['status_label']}")
             lines.append(f"来源：{lead['source']}（点击 contact 链接核对原文）")
@@ -309,7 +290,7 @@ def save_leads(leads: list[dict], existing_names: set[str], existing_urls: set[s
 def main() -> None:
     parser = argparse.ArgumentParser(description="赛事线索采集器")
     parser.add_argument("--city", help="只采集指定城市")
-    parser.add_argument("--source", default="zuicool", help="数据源：zuicool / bing / sogou / all（默认 zuicool）")
+    parser.add_argument("--source", default="zuicool", help="数据源：zuicool / sogou / all（默认 zuicool）")
     args = parser.parse_args()
 
     cities = [args.city] if args.city else CITIES
@@ -319,9 +300,7 @@ def main() -> None:
     leads: list[dict] = []
     if "zuicool" in sources:
         leads += collect_zuicool(cities)
-    if "bing" in sources:
-        leads += collect_bing_xhs(cities)
-    if "sogou" in sources:
+    if "sogou" in sources or "all" in sources:
         leads += collect_sogou_weixin(cities)
 
     log(f"\n共抓取线索 {len(leads)} 条，开始去重入库…")
