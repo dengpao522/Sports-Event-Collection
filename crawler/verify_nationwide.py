@@ -25,7 +25,9 @@
      （计数存 crawler/.verify_fails.json，容忍来源站临时风控/抖动，防止同日连击误杀）。
 
 结果处理（自动落地，无需人工逐条核对）：
-  - 页面失效 / 标题不符（B） / 连续失活（C）→ isPublished=0 自动下架，verifyStatus=AUTO_REJECTED；
+  - 页面失效 / 标题不符（B）/ 失活（C）→ 不单次下架：纳入留观计数（3 次跨天累计、
+    同日不重复），连续异常才 isPublished=0 自动下架（verifyStatus=AUTO_REJECTED）
+    ——网络抖动/来源站风控/页面漂移不误杀；
   - 状态标签与库内不一致     → 以详情页为准更新 status；
   - 深度核验通过（单源/双源）→ verifyStatus=AUTO_VERIFIED（前台「官方已核实」徽章）。
 
@@ -202,7 +204,8 @@ def reject(cur, eid: str, now: str, why: str, name: str, idx: int, total: int) -
 
 
 def verify_deep(cur, limit: int | None, interval: float, stat: dict) -> None:
-    """B. 深度核验：三源 + 平台域名扩展条目；含可达性/标题/状态核验与双源交叉判定。"""
+    """B. 深度核验：三源 + 平台域名扩展条目；含可达性/标题/状态核验与双源交叉判定。
+    页面失效/标题不符不单次下架：与存活核验共用留观计数（3 次跨天累计、同日不重复）。"""
     placeholders = ",".join("?" for _ in NATIONWIDE_SOURCES)
     sql = (
         f"SELECT id, name, city, sourceName, status, registerUrl FROM Event"
@@ -219,26 +222,52 @@ def verify_deep(cur, limit: int | None, interval: float, stat: dict) -> None:
 
     idx_zuicool, idx_heilian = build_cross_index(cur)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    # 留观计数与存活核验（C）共用一份文件：先加载，循环结束后写回（存活核验稍后重新加载）
+    fails = load_fails()
+    today = bj_today()
 
     for i, (eid, name, city, src, db_status, url) in enumerate(rows, 1):
         detail = probe_detail(url) if url else None
-        if detail is None:
-            # 页面失效：自动下架，不再前台展示
-            reject(cur, eid, now, "页面失效", name, i, total)
-            stat["rejected"] += 1
-            cur.connection.commit()
-            time.sleep(interval)
-            continue
 
-        # 标题一致：页面标题或文本含赛事名（容忍年份差异——去年份再兜底匹配）
-        core = re.sub(r"20\d{2}", "", name).strip()
-        title_ok = name in detail["text"] or name in detail["title"] or (
-            len(core) >= 4 and core in detail["text"]
-        )
-        if not title_ok:
-            reject(cur, eid, now, "标题不符", name, i, total)
-            stat["rejected"] += 1
-            cur.connection.commit()
+        # 负向判定：页面不可达 / 标题不符 → 不单次下架，纳入留观计数
+        # （单次失败可能是网络抖动、来源站风控、页面改版——跨天累计 FAIL_THRESHOLD 次才下架）
+        fail_reason = None
+        if detail is None:
+            fail_reason = "页面失效"
+        else:
+            # 标题一致：页面标题或文本含赛事名（容忍年份差异——去年份再兜底匹配）
+            core = re.sub(r"20\d{2}", "", name).strip()
+            title_ok = name in detail["text"] or name in detail["title"] or (
+                len(core) >= 4 and core in detail["text"]
+            )
+            if not title_ok:
+                fail_reason = "标题不符"
+
+        if fail_reason:
+            rec = fails.get(eid) or {"count": 0, "last": ""}
+            if rec["last"] == today:
+                # 同日已留观过：不重复计数（每轮核验之间仅隔小时级，不足以下结论）
+                stat["suspect"] += 1
+                print(
+                    f"  [{i}/{total}] ⚠️ {fail_reason}留观"
+                    f"（{rec['count']}/{FAIL_THRESHOLD}，同日不重复计数）: {name}"
+                )
+            else:
+                rec["count"] += 1
+                rec["last"] = today
+                if rec["count"] >= FAIL_THRESHOLD:
+                    # 跨多天连续异常：页面大概率真死了，自动下架
+                    reject(cur, eid, now, f"连续 {rec['count']} 次{fail_reason}", name, i, total)
+                    stat["rejected"] += 1
+                    fails.pop(eid, None)
+                    cur.connection.commit()
+                else:
+                    fails[eid] = rec
+                    stat["suspect"] += 1
+                    print(
+                        f"  [{i}/{total}] ⚠️ {fail_reason}留观"
+                        f"（{rec['count']}/{FAIL_THRESHOLD}）: {name}"
+                    )
             time.sleep(interval)
             continue
 
@@ -256,6 +285,7 @@ def verify_deep(cur, limit: int | None, interval: float, stat: dict) -> None:
         # #3 可信度判定：深度核验通过（详情页可达 + 标题一致）即 AUTO_VERIFIED，
         # 前台徽章「✓ 官方已核实」以此为准；另一源「同名同城」且状态一致 → 额外记双源印证
         # （计数区分便于观察交叉覆盖，未来黑练源扩容后可依据该比例收紧判定）。
+        fails.pop(eid, None)  # 本轮通过：页面健康，清除历史留观计数
         other_idx = idx_zuicool if src == HEILIAN_SOURCE else idx_heilian
         other = other_idx.get((norm_name_key(name), norm_city_key(city)))
         cur.execute(
@@ -276,6 +306,8 @@ def verify_deep(cur, limit: int | None, interval: float, stat: dict) -> None:
                 )
         cur.connection.commit()
         time.sleep(interval)
+
+    save_fails(fails)
 
 
 def load_fails() -> dict:
@@ -367,7 +399,7 @@ def verify_nationwide(limit: int | None = None, interval: float = 0.8) -> None:
             "fixed": 0,     # 状态修正
             "rejected": 0,  # 自动下架（深度+存活）
             "alive": 0,     # 存活正常
-            "suspect": 0,   # 失活留观
+            "suspect": 0,   # 留观（深度失效 + 存活失活，同日不重复计数）
         }
         # A. 日期兜底推进（全表，纯 DB 操作不耗 HTTP）
         stat["advanced"] = advance_finished_events(cur)
@@ -381,7 +413,7 @@ def verify_nationwide(limit: int | None = None, interval: float = 0.8) -> None:
         print(
             f"\n[自我核验] 完成：日期推进 {stat['advanced']}，双源印证 {stat['cross']}，"
             f"状态修正 {stat['fixed']}，单源核实 {stat['single']}，"
-            f"存活正常 {stat['alive']}，失活留观 {stat['suspect']}，自动下架 {stat['rejected']}"
+            f"存活正常 {stat['alive']}，留观 {stat['suspect']}，自动下架 {stat['rejected']}"
         )
     finally:
         conn.close()
