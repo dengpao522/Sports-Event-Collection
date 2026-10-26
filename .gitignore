@@ -37,5 +37,8 @@ prisma/*.db-journal
 # ===== 定时采集调度器状态文件（lib/daily-crawler.ts 运行时写入）=====
 crawler/.crawler_state.json
 
+# ===== 核验失效计数文件（verify_nationwide.py 存活核验容错计数）=====
+crawler/.verify_fails.json
+
 # ===== Trae / IDE 分享临时包 =====
 .trae-html-share-packages/

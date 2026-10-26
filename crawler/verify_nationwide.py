@@ -1,35 +1,46 @@
 # -*- coding: utf-8 -*-
 """
-全国赛事自我核验脚本：全量回访详情页，自动审核入库的全国赛事（三个采集源）。
+全国赛事自我核验脚本 v2：日期兜底推进 + 深度核验双源交叉 + 扩展存活核验。
 
-覆盖源：
-  - zuicool_nationwide（reg.zuicool.com/<raceId>，span.label 状态标签）
-  - zuicool_events（zuicool.com/event/<id>，页面状态文案）
-  - heilianapp（heilianapp.com/events/<id>，页面状态文案）
+三块职责：
 
-核验维度（每条赛事）：
-  1. 可达性   —— 详情页 HTTP 200 且能解析；
-  2. 标题一致 —— 页面标题/文本中能找到赛事名（容忍年份前缀差异）；
-  3. 状态一致 —— 详情页报名状态与库内 status 比对，以详情页实时状态为准修正。
+  A. 日期兜底推进（数据准确性 #1）
+     比赛日（raceDateEnd 优先，缺省用 raceDateStart）早于北京时间今天
+     → status 置 FINISHED（前台排序沉底），不依赖页面状态标签。
+     兼容库内两种存储格式：integer（毫秒时间戳）与 text（ISO 'YYYY-MM-DDTHH:MM:SS.mmmZ'）。
+
+  B. 深度核验 + 双源交叉（#2 深度部分 + #3）
+     覆盖：三源（zuicool_nationwide / zuicool_events / heilianapp）
+           + registerUrl 指向 zuicool.com / heilianapp.com 的其他条目（「最酷报名平台」等）。
+     每条回访详情页：可达性 → 标题一致 → 状态一致（以详情页实时状态为准修正）。
+     可信度判定（#3）：另一源存在「同名同城」条目且状态一致 → AUTO_VERIFIED（双源印证）；
+     单源通过 / 两源状态矛盾 / 页面无状态标签 → UNVERIFIED（待核实），verifiedAt 仍记录核验时间。
+
+  C. 扩展存活核验（#2 主体）
+     覆盖：非三源且 registerUrl 指向第三方/官网域名的条目（马拉松官网、野途、斯巴达等）。
+     仅做 HTTP 存活探测（这些页面不是报名详情页，不做标题/状态判定，避免标题形式差异误杀）；
+     连续 2 次探测失败才下架（计数存 crawler/.verify_fails.json，容忍来源站临时风控/抖动）。
 
 结果处理（自动落地，无需人工逐条核对）：
-  - 页面失效 / 标题不符        → isPublished=0 自动下架，verifyStatus=AUTO_REJECTED；
-  - 状态标签与库内不一致       → 以详情页为准更新 status，verifyStatus=AUTO_VERIFIED；
-  - 全部一致                   → verifyStatus=AUTO_VERIFIED，verifiedAt=当前时间；
-  - 页面正常但无状态标签       → 保持上线，verifyStatus 维持 UNVERIFIED（仅计数，留人工抽查）。
+  - 页面失效 / 标题不符（B） / 连续失活（C）→ isPublished=0 自动下架，verifyStatus=AUTO_REJECTED；
+  - 状态标签与库内不一致     → 以详情页为准更新 status；
+  - 双源一致                 → verifyStatus=AUTO_VERIFIED；
+  - 单源/矛盾/无状态标签     → verifyStatus=UNVERIFIED（待人工抽查或下轮复核）。
 
 用法：
   python crawler/verify_nationwide.py                 # 全量核验
-  python crawler/verify_nationwide.py --limit 20     # 抽样核验前 20 条
+  python crawler/verify_nationwide.py --limit 20     # 深度/存活各环节各抽前 20 条
   python crawler/verify_nationwide.py --interval 0.5 # 自定义请求间隔（秒）
 """
 import argparse
 import io
+import json
+import os
 import re
 import sqlite3
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
@@ -40,11 +51,25 @@ from collect import DB_PATH, HEADERS
 import requests
 
 # 核验结论常量（写入 Event.verifyStatus）
-VERIFIED = "AUTO_VERIFIED"    # 详情页可达且状态一致（或已按详情页修正）
-REJECTED = "AUTO_REJECTED"    # 页面失效/标题不符，自动下架
+VERIFIED = "AUTO_VERIFIED"    # 双源交叉印证：详情页实时状态与另一源库内状态一致
+REJECTED = "AUTO_REJECTED"    # 页面失效/标题不符/连续失活，自动下架
+PENDING = "UNVERIFIED"        # 单源通过 / 两源矛盾 / 状态无法识别 → 待人工抽查或下轮复核
 
-# 自我核验覆盖的三个采集源
+# 深度核验覆盖的三个采集源（sourceName 口径）
 NATIONWIDE_SOURCES = ("zuicool_nationwide", "zuicool_events", "heilianapp")
+# 双源交叉的两方：最酷系（nationwide + events）与黑练
+ZUICOOL_SOURCES = ("zuicool_nationwide", "zuicool_events")
+HEILIAN_SOURCE = "heilianapp"
+
+# 深度核验扩展：registerUrl 指向这两个平台域名的条目（页面结构与三源一致，可解析状态标签）
+DEEP_URL_LIKE = ("%zuicool.com%", "%heilianapp%")
+
+# 存活核验：连续失效下架阈值与计数文件（运行时产物，不入库不提交）
+FAIL_THRESHOLD = 2
+FAIL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".verify_fails.json")
+
+# 北京时间时区（日期推进与文本日期比对的日历基准）
+BJT = timezone(timedelta(hours=8))
 
 # 页面状态文案 → 库内状态。
 # 顺序关键：负向状态（已截止/已结束）优先——开放报名的页面不会出现这些词，
@@ -71,7 +96,7 @@ def page_status_of(url: str, soup: BeautifulSoup, text: str) -> str:
 
 
 def probe_detail(url: str) -> dict | None:
-    """抓取单个详情页，返回 {page_status, title_ok, name}；页面不可达返回 None。"""
+    """抓取单个详情页，返回 {page_status, title, text}；页面不可达返回 None。"""
     try:
         r = requests.get(url, headers=HEADERS, timeout=25)
         if r.status_code != 200:
@@ -85,89 +110,266 @@ def probe_detail(url: str) -> dict | None:
     return {"text": text, "title": title, "page_status": page_status_of(url, soup, text)}
 
 
+def probe_alive(url: str) -> bool:
+    """存活探测：仅判断 HTTP 是否 200（跟随跳转）。
+    来源站返回风控验证页（200 但无内容）也视为存活——宁可漏杀不可误杀。"""
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=25, allow_redirects=True)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def bj_today() -> str:
+    """北京时间今天 'YYYY-MM-DD'（ISO 文本日期比对的日历基准）"""
+    return datetime.now(BJT).strftime("%Y-%m-%d")
+
+
+def bj_today_zero_ms() -> int:
+    """北京时间今天零点的 epoch 毫秒（毫秒整数日期比对的日历基准）"""
+    d = datetime.now(BJT).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(d.timestamp() * 1000)
+
+
+def advance_finished_events(cur) -> int:
+    """A. 比赛日兜底推进：结束日（缺省开始日）早于北京今天 → status 置 FINISHED。
+
+    判定边界：比赛日 = 北京今天 → 不推进（当天还在比）；
+              比赛日 ≤ 北京昨天 → 推进（最多滞后约 8 小时，宁晚勿早）。
+    兼容两种存储格式：integer 毫秒时间戳 / text ISO 字符串（CAST 整数会得 0，必须分支）。
+    多日赛事以 raceDateEnd 为准（有结束日时不看开始日，避免联赛中途被误判结束）。
+    """
+    cutoff_ms = bj_today_zero_ms()
+    today = bj_today()
+    sql = (
+        "UPDATE Event SET status='FINISHED', updatedAt=datetime('now')"
+        " WHERE isPublished=1 AND status!='FINISHED' AND ("
+        # 分支一：raceDateEnd 存在且已过（多日赛事以结束日为准）
+        "  (raceDateEnd IS NOT NULL AND ("
+        "    (typeof(raceDateEnd)='integer' AND CAST(raceDateEnd AS INTEGER) < ?)"
+        "    OR (typeof(raceDateEnd)!='integer'"
+        "        AND substr(CAST(raceDateEnd AS TEXT),1,10) < ?)))"
+        " OR"
+        # 分支二：无结束日，raceDateStart 已过
+        "  (raceDateEnd IS NULL AND raceDateStart IS NOT NULL AND ("
+        "    (typeof(raceDateStart)='integer' AND CAST(raceDateStart AS INTEGER) < ?)"
+        "    OR (typeof(raceDateStart)!='integer'"
+        "        AND substr(CAST(raceDateStart AS TEXT),1,10) < ?)))"
+        ")"
+    )
+    cur.execute(sql, (cutoff_ms, today, cutoff_ms, today))
+    return cur.rowcount
+
+
+def norm_name_key(name: str) -> str:
+    """名称归一化：去年份、去全部空白（跨源常见『2026 XX马拉松』vs『XX马拉松』差异）"""
+    core = re.sub(r"20\d{2}", "", name)
+    return re.sub(r"\s+", "", core)
+
+
+def norm_city_key(city: str) -> str:
+    """城市归一化：去首尾空白与尾部『市』（跨源常见『杭州市』vs『杭州』差异）"""
+    return (city or "").strip().removesuffix("市")
+
+
+def build_cross_index(cur) -> tuple[dict, dict]:
+    """建双源交叉索引 {(归一名, 归一城): status}。
+    返回 (idx_zuicool 最酷系, idx_heilian 黑练)。
+    索引是核验开始前的库内快照：本轮被修正的状态下一轮才参与比对（每日跑，最多滞后一天）。"""
+    idx_zuicool: dict = {}
+    idx_heilian: dict = {}
+    for src, name, city, status in cur.execute(
+        "SELECT sourceName, name, city, status FROM Event WHERE isPublished=1"
+    ):
+        key = (norm_name_key(name), norm_city_key(city))
+        if src in ZUICOOL_SOURCES:
+            idx_zuicool[key] = status
+        elif src == HEILIAN_SOURCE:
+            idx_heilian[key] = status
+    return idx_zuicool, idx_heilian
+
+
+def reject(cur, eid: str, now: str, why: str, name: str, idx: int, total: int) -> None:
+    """下架公共动作：isPublished=0 + verifyStatus=AUTO_REJECTED + 落日志"""
+    cur.execute(
+        "UPDATE Event SET isPublished=0, verifyStatus=?, verifiedAt=?,"
+        " updatedAt=datetime('now') WHERE id=?",
+        (REJECTED, now, eid),
+    )
+    print(f"  [{idx}/{total}] ⛔ 下架（{why}）: {name}")
+
+
+def verify_deep(cur, limit: int | None, interval: float, stat: dict) -> None:
+    """B. 深度核验：三源 + 平台域名扩展条目；含可达性/标题/状态核验与双源交叉判定。"""
+    placeholders = ",".join("?" for _ in NATIONWIDE_SOURCES)
+    sql = (
+        f"SELECT id, name, city, sourceName, status, registerUrl FROM Event"
+        f" WHERE isPublished=1 AND registerUrl!=''"
+        f" AND (sourceName IN ({placeholders})"
+        f"      OR registerUrl LIKE ? OR registerUrl LIKE ?)"
+        f" ORDER BY name"
+    )
+    rows = cur.execute(sql, (*NATIONWIDE_SOURCES, *DEEP_URL_LIKE)).fetchall()
+    if limit:
+        rows = rows[:limit]
+    total = len(rows)
+    print(f"[深度核验] 待核验 {total} 条（三源 + zuicool/heilian 域名扩展）…")
+
+    idx_zuicool, idx_heilian = build_cross_index(cur)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    for i, (eid, name, city, src, db_status, url) in enumerate(rows, 1):
+        detail = probe_detail(url) if url else None
+        if detail is None:
+            # 页面失效：自动下架，不再前台展示
+            reject(cur, eid, now, "页面失效", name, i, total)
+            stat["rejected"] += 1
+            cur.connection.commit()
+            time.sleep(interval)
+            continue
+
+        # 标题一致：页面标题或文本含赛事名（容忍年份差异——去年份再兜底匹配）
+        core = re.sub(r"20\d{2}", "", name).strip()
+        title_ok = name in detail["text"] or name in detail["title"] or (
+            len(core) >= 4 and core in detail["text"]
+        )
+        if not title_ok:
+            reject(cur, eid, now, "标题不符", name, i, total)
+            stat["rejected"] += 1
+            cur.connection.commit()
+            time.sleep(interval)
+            continue
+
+        # 状态一致：以详情页实时状态为准修正
+        final_status = db_status
+        if detail["page_status"] and detail["page_status"] != db_status:
+            cur.execute(
+                "UPDATE Event SET status=?, updatedAt=datetime('now') WHERE id=?",
+                (detail["page_status"], eid),
+            )
+            stat["fixed"] += 1
+            print(f"  [{i}/{total}] 🔧 状态修正 {db_status}→{detail['page_status']}: {name}")
+            final_status = detail["page_status"]
+
+        # #3 双源交叉判定：另一源存在「同名同城」条目且状态一致 → 双源印证；
+        # 单源通过 / 两源矛盾 → 待核实（UNVERIFIED，verifiedAt 记录本次核验时间）
+        other_idx = idx_zuicool if src == HEILIAN_SOURCE else idx_heilian
+        other = other_idx.get((norm_name_key(name), norm_city_key(city)))
+        if other is not None and other == final_status:
+            cur.execute(
+                "UPDATE Event SET verifyStatus=?, verifiedAt=?,"
+                " updatedAt=datetime('now') WHERE id=?",
+                (VERIFIED, now, eid),
+            )
+            stat["cross"] += 1
+        else:
+            cur.execute(
+                "UPDATE Event SET verifyStatus=?, verifiedAt=?,"
+                " updatedAt=datetime('now') WHERE id=?",
+                (PENDING, now, eid),
+            )
+            stat["single"] += 1
+            if other is not None:
+                # 两源都收录但状态矛盾——数据可疑，留人工核对
+                print(f"  [{i}/{total}] ⚠️ 两源状态矛盾（本源 {final_status} / 对方 {other}）: {name}")
+        cur.connection.commit()
+        time.sleep(interval)
+
+
+def load_fails() -> dict:
+    """读失效计数文件；文件缺失/损坏时从空计数开始（只影响容错轮次，不影响正确性）"""
+    try:
+        with open(FAIL_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_fails(d: dict) -> None:
+    """写失效计数文件；失败仅失去跨轮计数，不影响核验主流程"""
+    try:
+        with open(FAIL_FILE, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def verify_survival(cur, limit: int | None, interval: float, stat: dict) -> None:
+    """C. 扩展存活核验：非三源且 registerUrl 指向官网/第三方平台 → 仅 HTTP 存活探测，
+    连续 FAIL_THRESHOLD 次失活才下架（来源站临时风控/抖动不该误杀条目）。"""
+    placeholders = ",".join("?" for _ in NATIONWIDE_SOURCES)
+    sql = (
+        f"SELECT id, name, registerUrl FROM Event"
+        f" WHERE isPublished=1 AND registerUrl!=''"
+        f" AND sourceName NOT IN ({placeholders})"
+        f" AND registerUrl NOT LIKE ? AND registerUrl NOT LIKE ?"
+        f" ORDER BY name"
+    )
+    rows = cur.execute(sql, (*NATIONWIDE_SOURCES, *DEEP_URL_LIKE)).fetchall()
+    if limit:
+        rows = rows[:limit]
+    total = len(rows)
+    print(f"[存活核验] 待核验 {total} 条（官网/第三方报名平台）…")
+
+    fails = load_fails()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    for i, (eid, name, url) in enumerate(rows, 1):
+        if probe_alive(url):
+            # 存活：失效计数清零（含此前留观条目的复检通过）
+            fails.pop(eid, None)
+            stat["alive"] += 1
+        else:
+            cnt = fails.get(eid, 0) + 1
+            if cnt >= FAIL_THRESHOLD:
+                # 连续两次探测失败：页面大概率真死了，自动下架
+                reject(cur, eid, now, f"连续 {cnt} 次失活", name, i, total)
+                stat["rejected"] += 1
+                fails.pop(eid, None)
+                cur.connection.commit()
+            else:
+                # 首次失活：留观一轮，防止来源站抖动误杀
+                fails[eid] = cnt
+                stat["suspect"] += 1
+                print(f"  [{i}/{total}] ⚠️ 失活留观（{cnt}/{FAIL_THRESHOLD}）: {name}")
+        time.sleep(interval)
+    save_fails(fails)
+
+
 def verify_nationwide(limit: int | None = None, interval: float = 0.8) -> None:
     conn = sqlite3.connect(DB_PATH)
     try:
         cur = conn.cursor()
-        placeholders = ",".join("?" for _ in NATIONWIDE_SOURCES)
-        sql = (
-            f"SELECT id, name, status, registerUrl FROM Event"
-            f" WHERE sourceName IN ({placeholders}) AND isPublished=1"
-            f" ORDER BY name"
-        )
-        rows = cur.execute(sql, NATIONWIDE_SOURCES).fetchall()
-        if limit:
-            rows = rows[:limit]
-        total = len(rows)
-        print(f"[自我核验] 待核验 {total} 条全国赛事…")
-
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-        stat = {"pass": 0, "fixed": 0, "rejected": 0, "need_human": 0}
-        for i, (eid, name, db_status, url) in enumerate(rows, 1):
-            detail = probe_detail(url) if url else None
-            if detail is None:
-                # 页面失效：自动下架，不再前台展示
-                cur.execute(
-                    "UPDATE Event SET isPublished=0, verifyStatus=?, verifiedAt=?,"
-                    " updatedAt=datetime('now') WHERE id=?",
-                    (REJECTED, now, eid),
-                )
-                stat["rejected"] += 1
-                print(f"  [{i}/{total}] ⛔ 下架（页面失效）: {name}")
-                conn.commit()
-                time.sleep(interval)
-                continue
-            # 标题一致：页面标题或文本含赛事名（容忍年份差异——去掉年份再兜底匹配）
-            core = name.replace("2026", "").replace("2027", "").strip()
-            title_ok = name in detail["text"] or name in detail["title"] or (
-                len(core) >= 4 and core in detail["text"]
-            )
-            if not title_ok:
-                cur.execute(
-                    "UPDATE Event SET isPublished=0, verifyStatus=?, verifiedAt=?,"
-                    " updatedAt=datetime('now') WHERE id=?",
-                    (REJECTED, now, eid),
-                )
-                stat["rejected"] += 1
-                print(f"  [{i}/{total}] ⛔ 下架（标题不符）: {name}")
-            elif detail["page_status"] and detail["page_status"] != db_status:
-                # 状态不一致：以详情页实时状态为准修正
-                cur.execute(
-                    "UPDATE Event SET status=?, verifyStatus=?, verifiedAt=?,"
-                    " updatedAt=datetime('now') WHERE id=?",
-                    (detail["page_status"], VERIFIED, now, eid),
-                )
-                stat["fixed"] += 1
-                print(f"  [{i}/{total}] 🔧 状态修正 {db_status}→{detail['page_status']}: {name}")
-            elif detail["page_status"]:
-                cur.execute(
-                    "UPDATE Event SET verifyStatus=?, verifiedAt=?,"
-                    " updatedAt=datetime('now') WHERE id=?",
-                    (VERIFIED, now, eid),
-                )
-                stat["pass"] += 1
-            else:
-                # 页面正常但未识别到状态：保持上线，留给人工抽查
-                cur.execute(
-                    "UPDATE Event SET verifyStatus='UNVERIFIED', verifiedAt=NULL,"
-                    " updatedAt=datetime('now') WHERE id=?",
-                    (eid,),
-                )
-                stat["need_human"] += 1
-            conn.commit()
-            time.sleep(interval)
-
+        stat = {
+            "advanced": 0,  # 日期兜底推进条数
+            "cross": 0,     # 双源印证
+            "single": 0,    # 单源/矛盾待核实
+            "fixed": 0,     # 状态修正
+            "rejected": 0,  # 自动下架（深度+存活）
+            "alive": 0,     # 存活正常
+            "suspect": 0,   # 失活留观
+        }
+        # A. 日期兜底推进（全表，纯 DB 操作不耗 HTTP）
+        stat["advanced"] = advance_finished_events(cur)
+        conn.commit()
+        print(f"[日期推进] 比赛日已过 → FINISHED：{stat['advanced']} 条")
+        # B. 深度核验 + 双源交叉
+        verify_deep(cur, limit, interval, stat)
+        # C. 扩展存活核验
+        verify_survival(cur, limit, interval, stat)
+        conn.commit()
         print(
-            f"\n[自我核验] 完成：通过 {stat['pass']}，状态修正 {stat['fixed']}，"
-            f"自动下架 {stat['rejected']}，待人工 {stat['need_human']}"
+            f"\n[自我核验] 完成：日期推进 {stat['advanced']}，双源印证 {stat['cross']}，"
+            f"状态修正 {stat['fixed']}，单源待核实 {stat['single']}，"
+            f"存活正常 {stat['alive']}，失活留观 {stat['suspect']}，自动下架 {stat['rejected']}"
         )
     finally:
         conn.close()
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="全国赛事自我核验")
-    ap.add_argument("--limit", type=int, default=None, help="仅核验前 N 条（抽样）")
+    ap = argparse.ArgumentParser(description="全国赛事自我核验 v2")
+    ap.add_argument("--limit", type=int, default=None, help="深度/存活各环节仅核验前 N 条（抽样）")
     ap.add_argument("--interval", type=float, default=0.8, help="请求间隔秒数")
     args = ap.parse_args()
     verify_nationwide(limit=args.limit, interval=args.interval)
