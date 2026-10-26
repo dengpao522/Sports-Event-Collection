@@ -142,12 +142,15 @@ def advance_finished_events(cur) -> int:
               比赛日 ≤ 北京昨天 → 推进（最多滞后约 8 小时，宁晚勿早）。
     兼容两种存储格式：integer 毫秒时间戳 / text ISO 字符串（CAST 整数会得 0，必须分支）。
     多日赛事以 raceDateEnd 为准（有结束日时不看开始日，避免联赛中途被误判结束）。
+    线上赛（名称含「线上」）跳过：比赛窗口灵活（补录/续期常见），状态由深度核验按
+    详情页实时判定；日历兜底会与详情页状态拉锯（每天 FINISHED↔OPEN 反复改写）。
     """
     cutoff_ms = bj_today_zero_ms()
     today = bj_today()
     sql = (
         "UPDATE Event SET status='FINISHED', updatedAt=datetime('now')"
-        " WHERE isPublished=1 AND status!='FINISHED' AND ("
+        # 线上赛不参与日历兜底（见 docstring）：状态以详情页实时判定为准
+        " WHERE isPublished=1 AND status!='FINISHED' AND name NOT LIKE '%线上%' AND ("
         # 分支一：raceDateEnd 存在且已过（多日赛事以结束日为准）
         "  (raceDateEnd IS NOT NULL AND ("
         "    (typeof(raceDateEnd)='integer' AND CAST(raceDateEnd AS INTEGER) < ?)"
