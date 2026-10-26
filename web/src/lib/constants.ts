@@ -108,19 +108,29 @@ export const PROVINCE_CITIES: { province: string; cities: string[] }[] = [
   { province: '新疆', cities: ['乌鲁木齐', '克拉玛依', '吐鲁番', '哈密', '昌吉', '博尔塔拉', '巴音郭楞', '阿克苏', '克孜勒苏', '喀什', '和田', '伊犁', '塔城', '阿勒泰'] },
 ];
 
-// 一级品类（筛选用，顺序即展示顺序）
+// 一级品类（筛选用，顺序即展示顺序）——按具体运动项目拆分，球类细分到项目
 export const CATEGORIES = [
-  { key: '跑步', label: '跑步/路跑' },
-  { key: '球类', label: '球类' },
-  { key: '户外', label: '户外' },
+  { key: '跑步', label: '跑步/马拉松' },
+  { key: '越野跑山', label: '越野/跑山' },
+  { key: '足球', label: '足球' },
+  { key: '篮球', label: '篮球' },
+  { key: '羽毛球', label: '羽毛球' },
+  { key: '网球', label: '网球' },
+  { key: '乒乓球', label: '乒乓球' },
+  { key: '排球', label: '排球' },
+  { key: '其他球类', label: '其他球类' },
+  { key: '户外', label: '户外/徒步' },
   { key: '骑行', label: '骑行' },
-  { key: '水上', label: '水上' },
+  { key: '水上', label: '水上/游泳' },
   { key: '冰雪', label: '冰雪' },
   { key: '铁人三项', label: '铁人三项' },
   { key: '武术搏击', label: '武术/搏击' },
-  { key: '室内健身', label: '室内/健身' },
-  { key: '棋牌智力', label: '棋牌/智力' },
+  { key: '垂钓', label: '垂钓' },
+  { key: '马术', label: '马术' },
+  { key: '轮滑滑板', label: '轮滑/滑板' },
   { key: '电子竞技', label: '电子竞技' },
+  { key: '棋牌智力', label: '棋牌/智力' },
+  { key: '室内健身', label: '室内/健身' },
   { key: '其他综合', label: '其他/综合' },
 ] as const;
 

@@ -508,25 +508,54 @@ def parse_deadline_md_cn(text: str, race_iso: str | None):
 
 
 def sport_category(name: str) -> str:
-    """从赛事名推断一级品类（与网站品类体系一致）"""
-    if any(k in name for k in ("越野", "山径", "跑山", "山地")):
-        return "跑步"  # 越野跑归跑步大类
-    if any(k in name for k in ("马拉松", "路跑", "10公里", "10KM", "健康跑", "亲子跑", "欢乐跑", "半马", "全马", "迎新跑")):
-        return "跑步"
+    """从赛事名推断一级品类（与网站 CATEGORIES 品类体系一致，球类细分到项目）。
+    判定顺序：特殊球种（冰球/水球归属冰雪/水上）→ 具体球种 → 越野 → 跑步 → 其余项目。"""
+    if "冰球" in name:
+        return "冰雪"
+    if "水球" in name:
+        return "水上"
+    # 具体球种（互相不含子串，顺序无关）
+    if "足球" in name:
+        return "足球"
+    if "篮球" in name:
+        return "篮球"
+    if "羽毛球" in name:
+        return "羽毛球"
+    if "网球" in name:
+        return "网球"
+    if "乒乓球" in name:
+        return "乒乓球"
+    if any(k in name for k in ("排球", "橄榄球", "棒球", "垒球", "曲棍球", "高尔夫", "台球", "壁球", "门球", "毽球", "藤球", "保龄球")):
+        return "其他球类"
+    # 跑步两细分：越野/跑山 独立于 马拉松/路跑
+    # 注意：骑行判断须在「山地」之前——「山地自行车」归骑行而非越野跑山
     if any(k in name for k in ("骑行", "自行车", "骑游")):
         return "骑行"
-    if any(k in name for k in ("徒步", "登山", "毅行", "登高")):
+    if any(k in name for k in ("越野", "山径", "跑山", "山地", "登山跑")):
+        return "越野跑山"
+    if any(k in name for k in ("马拉松", "路跑", "10公里", "10KM", "健康跑", "亲子跑", "欢乐跑", "半马", "全马", "迎新跑", "接力跑", "荧光跑", "彩色跑")):
+        return "跑步"
+    # 其余项目
+    if any(k in name for k in ("徒步", "登山", "毅行", "登高", "攀岩", "攀冰", "定向")):
         return "户外"
-    if any(k in name for k in ("游泳", "桨板", "赛艇", "皮划艇")):
+    if any(k in name for k in ("游泳", "冬泳", "泳渡", "横渡", "桨板", "赛艇", "皮划艇", "龙舟", "跳水", "潜水", "冲浪")):
         return "水上"
-    if any(k in name for k in ("滑雪", "冰雪")):
+    if any(k in name for k in ("滑雪", "滑冰", "冰雪")):
         return "冰雪"
     if any(k in name for k in ("铁人三项", "铁三", "IRONMAN", "铁人")):
         return "铁人三项"
-    if any(k in name for k in ("武术", "搏击", "拳击", "散打", "泰拳", "跆拳道", "空手道")):
+    if any(k in name for k in ("武术", "搏击", "拳击", "散打", "泰拳", "跆拳道", "空手道", "击剑", "柔道", "摔跤", "巴西柔术")):
         return "武术搏击"
+    if any(k in name for k in ("钓鱼", "垂钓", "路亚", "渔王")):
+        return "垂钓"
+    if any(k in name for k in ("马术", "骑马")):
+        return "马术"
+    if any(k in name for k in ("轮滑", "滑板", "平衡车", "BMX", "小轮车")):
+        return "轮滑滑板"
     if any(k in name for k in ("电竞", "电子竞技")):
         return "电子竞技"
+    if any(k in name for k in ("围棋", "象棋", "国际象棋", "桥牌", "麻将", "扑克", "智力运动")):
+        return "棋牌智力"
     if any(k in name for k in ("定向", "障碍赛", "斯巴达")):
         return "其他综合"
     return "其他综合"
