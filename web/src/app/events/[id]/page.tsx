@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { StatusTimeline } from '@/components/StatusTimeline';
 import { EventSubscribe } from '@/components/EventSubscribe';
 import { EVENT_KIND } from '@/lib/constants';
+import { SITE_URL } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +38,26 @@ export default async function EventDetailPage({
   const ev = await getEventById(id);
   if (!ev || !ev.isPublished) notFound();
 
+  // SportsEvent 结构化数据：name/时间/地点/状态，帮助搜索引擎生成富摘要
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SportsEvent',
+    name: ev.name,
+    url: `${SITE_URL}/events/${ev.id}`,
+    sport: ev.category,
+    eventStatus:
+      ev.status === 'POSTPONED'
+        ? 'https://schema.org/EventPostponed'
+        : 'https://schema.org/EventScheduled',
+    ...(ev.raceDateStart ? { startDate: ev.raceDateStart.toISOString() } : {}),
+    ...(ev.raceDateEnd ? { endDate: ev.raceDateEnd.toISOString() } : {}),
+    location: {
+      '@type': 'Place',
+      name: ev.venue || ev.city,
+      address: { '@type': 'PostalAddress', addressLocality: ev.city, addressCountry: 'CN' },
+    },
+  };
+
   const tags: string[] = JSON.parse(ev.tags || '[]');
   const isRegisterable =
     ev.kind === 'PARTICIPATABLE' && ['OPEN', 'FIRST_COME', 'UPCOMING'].includes(ev.status);
@@ -45,6 +66,8 @@ export default async function EventDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+
       <Link href="/" className="text-sm text-gray-500 hover:text-brand-600">
         ← 返回赛事列表
       </Link>

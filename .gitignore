@@ -34,5 +34,8 @@ prisma/*.db-journal
 *.sqlite
 *.sqlite-journal
 
+# ===== 定时采集调度器状态文件（lib/daily-crawler.ts 运行时写入）=====
+crawler/.crawler_state.json
+
 # ===== Trae / IDE 分享临时包 =====
 .trae-html-share-packages/
