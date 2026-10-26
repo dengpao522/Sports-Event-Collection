@@ -521,10 +521,14 @@ def sport_category(name: str) -> str:
         return "水上"
     if any(k in name for k in ("滑雪", "冰雪")):
         return "冰雪"
+    if any(k in name for k in ("铁人三项", "铁三", "IRONMAN", "铁人")):
+        return "铁人三项"
+    if any(k in name for k in ("武术", "搏击", "拳击", "散打", "泰拳", "跆拳道", "空手道")):
+        return "武术搏击"
+    if any(k in name for k in ("电竞", "电子竞技")):
+        return "电子竞技"
     if any(k in name for k in ("定向", "障碍赛", "斯巴达")):
         return "其他综合"
-    if any(k in name for k in ("铁人三项", "铁三", "IRONMAN", "铁人")):
-        return "其他综合"  # 铁三归其他综合大类
     return "其他综合"
 
 

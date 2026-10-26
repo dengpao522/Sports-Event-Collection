@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CITIES, SOON_CITIES, CATEGORIES } from '@/lib/constants';
+import { CITIES, HOT_CITIES, PROVINCE_CITIES, CATEGORIES } from '@/lib/constants';
 import { EventCard, type EventCardData } from './EventCard';
 import { NotifyModal } from './NotifyModal';
 
@@ -26,9 +26,10 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
     closed: false,
   });
   const [kw, setKw] = useState('');
-  // “更多即将开通城市”折叠面板与站内搜索
-  const [soonOpen, setSoonOpen] = useState(false);
-  const [soonFilter, setSoonFilter] = useState('');
+  // 「全部地区」省市级联面板状态
+  const [regionOpen, setRegionOpen] = useState(false);
+  const [activeProvince, setActiveProvince] = useState<string>('江苏');
+  const [regionFilter, setRegionFilter] = useState('');
 
   // 订阅弹窗
   const [modal, setModal] = useState<{ open: boolean; topic: string; req: Record<string, unknown> }>({
@@ -37,20 +38,46 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
     req: {},
   });
 
-  // 动态城市：库内已有已发布赛事、但不在 CITIES 常量里的城市（全国采集新增）自动出现
-  const baseCities: readonly string[] = CITIES;
-  const extraCities = useMemo(
-    () =>
-      Array.from(new Set(events.map((e) => e.city).filter(Boolean))).filter(
-        (c) => !baseCities.includes(c),
-      ),
-    [events, baseCities],
-  );
-  // 「即将开通」池：排除常量城市与已动态开通的城市，避免重复
-  const soonCities = useMemo(
-    () => SOON_CITIES.filter((c) => !baseCities.includes(c) && !extraCities.includes(c)),
-    [extraCities, baseCities],
-  );
+  // 已开通城市 = 库内有已发布赛事的城市 ∪ 常量 25 城（保底可筛选）
+  const openedCities = useMemo(() => {
+    const s = new Set<string>(CITIES);
+    for (const e of events) {
+      if (e.city) s.add(e.city);
+    }
+    return s;
+  }, [events]);
+
+  // 动态城市中不在省市映射里的（县级/新区等采集推断名），归入「其他地区」tab
+  const extraRegions = useMemo(() => {
+    const known = new Set(PROVINCE_CITIES.flatMap((p) => p.cities));
+    return Array.from(openedCities).filter((c) => !known.has(c)).sort();
+  }, [openedCities]);
+
+  // 级联面板当前省的城市列表（映射城市 ∪ 该省动态城市）
+  const provinceCities = useMemo(() => {
+    if (activeProvince === '其他地区') return extraRegions;
+    const mapped = PROVINCE_CITIES.find((p) => p.province === activeProvince)?.cities ?? [];
+    // 动态城市若属于该省（在映射里）自然包含；不在映射的动态城市已归其他地区
+    return Array.from(new Set([...mapped, ...extraRegions])).filter(
+      (c) => mapped.includes(c) || activeProvince === '其他地区',
+    );
+  }, [activeProvince, extraRegions]);
+
+  // 面板搜索：跨省匹配城市（返回 [省名, 城市名]）
+  const searchResults = useMemo(() => {
+    const q = regionFilter.trim();
+    if (!q) return null;
+    const all: Array<{ province: string; city: string }> = [];
+    for (const p of PROVINCE_CITIES) {
+      for (const c of p.cities) {
+        if (c.includes(q) || p.province.includes(q)) all.push({ province: p.province, city: c });
+      }
+    }
+    for (const c of extraRegions) {
+      if (c.includes(q)) all.push({ province: '其他地区', city: c });
+    }
+    return all;
+  }, [regionFilter, extraRegions]);
 
   const allowedStatuses = useMemo(
     () => STATUS_GROUPS.filter((g) => groups[g.key]).flatMap((g) => g.statuses),
@@ -81,6 +108,21 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
     );
   }, [gaps, city, category]);
 
+  /** 选择城市：已开通直接筛选；未开通弹订阅提醒 */
+  const pickCity = (c: string) => {
+    if (openedCities.has(c)) {
+      setCity(c);
+      setRegionOpen(false);
+      setRegionFilter('');
+    } else {
+      setModal({
+        open: true,
+        topic: `开通提醒：${c}`,
+        req: { type: 'CITY_LAUNCH', city: c },
+      });
+    }
+  };
+
   return (
     <div>
       {/* 搜索框 */}
@@ -91,9 +133,9 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
         className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
       />
 
-      {/* 城市：常量城市 + 全国采集动态开通的城市 */}
+      {/* 地区：热门城市 pill + 全部地区级联入口 */}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        {[...CITIES, ...extraCities].map((c) => (
+        {[...HOT_CITIES, ...(HOT_CITIES.includes(city as (typeof HOT_CITIES)[number]) ? [] : [city])].map((c) => (
           <button
             key={c}
             onClick={() => setCity(c)}
@@ -106,45 +148,98 @@ export function Discovery({ events, gaps }: { events: EventCardData[]; gaps: Gap
             {c}
           </button>
         ))}
-        {/* 全国更多城市：折叠展示，支持搜索，点击城市名订阅开通提醒 */}
-        {soonCities.length > 0 && (
-          <button
-            onClick={() => setSoonOpen((v) => !v)}
-            className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-400 hover:border-brand-300 hover:text-brand-600"
-          >
-            {soonOpen ? '收起' : `全国更多城市（${soonCities.length} 城即将开通）▾`}
-          </button>
-        )}
+        <button
+          onClick={() => setRegionOpen((v) => !v)}
+          className={`rounded-full border px-3 py-1.5 text-sm transition ${
+            regionOpen
+              ? 'border-brand-400 bg-brand-50 font-semibold text-brand-700'
+              : 'border-dashed border-gray-300 text-gray-500 hover:border-brand-300 hover:text-brand-600'
+          }`}
+        >
+          {regionOpen ? '收起地区 ▴' : '全部地区 ▾'}
+        </button>
       </div>
-      {soonOpen && (
+
+      {/* 省市级联面板 */}
+      {regionOpen && (
         <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
           <input
-            value={soonFilter}
-            onChange={(e) => setSoonFilter(e.target.value)}
-            placeholder={`搜索城市，如：拉萨、乌鲁木齐（共 ${soonCities.length} 城）`}
+            value={regionFilter}
+            onChange={(e) => setRegionFilter(e.target.value)}
+            placeholder="搜索城市 / 省份，如：三亚、浙江"
             className="mb-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
           />
-          <div className="flex flex-wrap gap-1.5">
-            {soonCities.filter((c) => !soonFilter.trim() || c.includes(soonFilter.trim())).map((c) => (
-              <button
-                key={c}
-                onClick={() =>
-                  setModal({
-                    open: true,
-                    topic: `开通提醒：${c}`,
-                    req: { type: 'CITY_LAUNCH', city: c },
-                  })
-                }
-                className="rounded-full border border-dashed border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-500 hover:border-brand-300 hover:text-brand-600"
-                title="订阅开通提醒"
-              >
-                {c}
-              </button>
-            ))}
-            {soonCities.filter((c) => c.includes(soonFilter.trim())).length === 0 && (
-              <span className="px-2 py-1 text-xs text-gray-400">未找到该城市，可直接在上方搜索赛事试试</span>
-            )}
-          </div>
+          {searchResults ? (
+            /* 搜索模式：跨省列出匹配城市 */
+            <div className="flex flex-wrap gap-1.5">
+              {searchResults.map(({ province, city: c }) => (
+                <button
+                  key={`${province}-${c}`}
+                  onClick={() => pickCity(c)}
+                  className={`rounded-full border px-2.5 py-1 text-xs ${
+                    openedCities.has(c)
+                      ? 'border-brand-300 bg-white text-brand-700 hover:bg-brand-50'
+                      : 'border-dashed border-gray-300 bg-white text-gray-500 hover:border-brand-300'
+                  }`}
+                  title={openedCities.has(c) ? '查看该城赛事' : '订阅开通提醒'}
+                >
+                  {c}
+                  <span className="ml-1 text-gray-400">{province}</span>
+                </button>
+              ))}
+              {searchResults.length === 0 && (
+                <span className="px-2 py-1 text-xs text-gray-400">未找到该城市，可直接在上方搜索赛事试试</span>
+              )}
+            </div>
+          ) : (
+            /* 省市两级模式：左侧省份 tab，右侧城市 pill */
+            <div className="flex gap-3">
+              <div className="max-h-64 w-28 shrink-0 overflow-y-auto rounded-lg bg-white p-1">
+                {[
+                  ...PROVINCE_CITIES.map((p) => p.province),
+                  ...(extraRegions.length > 0 ? ['其他地区'] : []),
+                ].map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setActiveProvince(p)}
+                    className={`block w-full rounded-md px-2 py-1.5 text-left text-xs ${
+                      activeProvince === p
+                        ? 'bg-brand-50 font-semibold text-brand-700'
+                        : 'text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1.5 text-xs text-gray-400">
+                  {activeProvince} · 实心为已开通，虚线点击订阅开通提醒
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {provinceCities.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => pickCity(c)}
+                      className={`rounded-full border px-2.5 py-1 text-xs ${
+                        city === c
+                          ? 'border-brand-500 bg-brand-500 font-semibold text-white'
+                          : openedCities.has(c)
+                            ? 'border-gray-300 bg-white text-gray-700 hover:border-brand-300 hover:text-brand-600'
+                            : 'border-dashed border-gray-300 bg-white text-gray-400 hover:border-brand-300'
+                      }`}
+                      title={openedCities.has(c) ? '查看该城赛事' : '订阅开通提醒'}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                  {provinceCities.length === 0 && (
+                    <span className="px-2 py-1 text-xs text-gray-400">该地区暂无城市</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
