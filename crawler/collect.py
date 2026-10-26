@@ -251,6 +251,32 @@ def s_get(url: str, timeout: int = 20) -> str:
     return r.text
 
 
+def resolve_sogou_link(s: requests.Session, link_url: str) -> str:
+    """当场解析搜狗中转链接（token 与会话绑定、时效极短，必须立即解析）。
+    中转页通过 JS 拼接变量后 window.location.replace(url) 跳转到真实微信文章；
+    解析失败返回空串（调用方保留搜狗中转 URL，由后台人工核对）。"""
+    try:
+        r = s.get(link_url, timeout=20)
+        if r.status_code != 200:
+            return ""
+        if "weixin.qq.com" in r.url:
+            return r.url  # 直接 302 到微信的情形
+        text = r.text
+        # 情形 1：多段字符串拼接变量（var url = '...'; url += '...';）
+        frags = re.findall(r"\burl\s*\+?=\s*['\"]([^'\"]+)['\"]", text)
+        joined = "".join(frags)
+        if "weixin.qq.com" in joined:
+            return joined
+        # 情形 2：replace 里直接内联完整 URL
+        m = re.search(r'window\.location\.replace\(\s*["\']([^"\']*weixin\.qq\.com[^"\']*)["\']', text)
+        if m:
+            return m.group(1)
+        return ""
+    except Exception as e:
+        log(f"    [sogou] 中转解析异常: {type(e).__name__}")
+        return ""
+
+
 def collect_sogou_weixin(cities: list[str]) -> list[dict]:
     """搜狗微信文章搜索：公众号是赛事推文的发布主场，此源直接覆盖。
     命中条目当场解析中转链接（会话内有效）拿真实文章 URL 并抓取正文摘要，
@@ -263,7 +289,16 @@ def collect_sogou_weixin(cities: list[str]) -> list[dict]:
             break  # 验证码出现后同会话继续必被拦，直接结束本轮
         for kw in SOGOU_KEYWORDS:
             url = f"https://weixin.sogou.com/weixin?type=2&query={city}+{kw}"
-            html = fetch(url)
+            # 搜索请求必须走同一 Session（携带预热 ABTEST/SUID 与可选登录 Cookie），否则易触发风控
+            try:
+                r = s.get(url, timeout=20)
+                html = None
+                if r.status_code == 200:
+                    r.encoding = r.apparent_encoding or "utf-8"
+                    html = r.text
+            except Exception as e:
+                log(f"    [sogou] 请求异常: {type(e).__name__}")
+                html = None
             if html is None:
                 continue
             if "antispider" in html or "验证码" in html[:3000]:
@@ -385,6 +420,9 @@ def collect_rss() -> list[dict]:
 ZUICOOL_STATUS_MAP = {"报名中": "OPEN", "已截止": "CLOSED", "已结束": "FINISHED", "已关闭": "CLOSED"}
 NATIONWIDE_SHEET = "最酷全国采集 2026-10-26"
 
+# 赛事大全（zuicool.com/events）批次标记
+EVENTS_SHEET = "最酷赛事大全 2026-10-26"
+
 
 def infer_city_from_venue(venue: str) -> str:
     """从最酷地点行（如「浙江・温州市苍南县・xxx」）推断地级市名，
@@ -433,6 +471,42 @@ def parse_deadline_cn(text: str):
         return None
 
 
+def parse_race_date_dot(text: str):
+    """解析赛事大全卡片的「2026.11.14」点分 / 黑练日历的「2026-11-08」横线日期，返回 ISO 字符串或 None"""
+    if not text:
+        return None
+    m = re.search(r"(20\d{2})[.\-](\d{1,2})[.\-](\d{1,2})", text)
+    if not m:
+        return parse_race_date_cn(text)
+    year, month, day = int(m[1]), int(m[2]), int(m[3])
+    if month <= 2 and year < 2027:
+        year += 1
+    try:
+        return f"{year:04d}-{month:02d}-{day:02d}T00:00:00.000Z"
+    except ValueError:
+        return None
+
+
+def parse_deadline_md_cn(text: str, race_iso: str | None):
+    """解析赛事大全的「报名截止：11-06 12:00」（无年份）。
+    年份从比赛日期推断：截止必然不晚于比赛；若截止月日大于比赛月日则视为跨年（比赛次年 1-2 月、截止在上一年底）。"""
+    if not text:
+        return None
+    m = re.search(r"(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2})[:：](\d{2}))?", text)
+    if not m:
+        return None
+    month, day = int(m[1]), int(m[2])
+    hour = int(m[3]) if m[3] else 23
+    minute = int(m[4]) if m[4] else 59
+    year = int(race_iso[:4]) if race_iso else 2026
+    if race_iso and (month, day) > (int(race_iso[5:7]), int(race_iso[8:10])):
+        year -= 1
+    try:
+        return f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:00.000Z"
+    except ValueError:
+        return None
+
+
 def sport_category(name: str) -> str:
     """从赛事名推断一级品类（与网站品类体系一致）"""
     if any(k in name for k in ("越野", "山径", "跑山", "山地")):
@@ -449,7 +523,100 @@ def sport_category(name: str) -> str:
         return "冰雪"
     if any(k in name for k in ("定向", "障碍赛", "斯巴达")):
         return "其他综合"
+    if any(k in name for k in ("铁人三项", "铁三", "IRONMAN", "铁人")):
+        return "其他综合"  # 铁三归其他综合大类
     return "其他综合"
+
+
+# ---------- 数据源 6：黑练赛事日历（heilianapp.com，四品类全量直接入库） ----------
+
+HEILIAN_CALENDARS = [
+    ("/chinamarathon", "马拉松·路跑"),
+    ("/gobichina", "越野跑"),
+    ("/chinagranfondo", "自行车"),
+    ("/chinatriathlon", "铁人三项"),
+]
+HEILIAN_SHEET = "黑练赛事日历 2026-10-26"
+# 状态徽章文案 → 库内状态
+HEILIAN_STATUS_MAP = {
+    "正在报名": "OPEN",
+    "报名即将结束": "OPEN",
+    "火热报名中": "OPEN",
+    "报名结束": "CLOSED",
+    "已结束": "CLOSED",
+    "即将开始": "UPCOMING",
+    "未开始": "UPCOMING",
+    "暂未报名": "UPCOMING",
+}
+
+
+def collect_heilian() -> list[dict]:
+    """黑练（heilianapp.com）四品类赛事日历：单页全量（马拉松 480+/越野 400+），
+    每条含名称/比赛日期/地点/报名状态徽章。只收今天及以后开赛的赛事。"""
+    leads: list[dict] = []
+    today = time.strftime("%Y-%m-%d")
+    seen_ids: set[str] = set()
+    for path, label in HEILIAN_CALENDARS:
+        html = fetch(f"https://heilianapp.com{path}", timeout=25)
+        if not html:
+            log(f"  [黑练] {label}: 抓取失败")
+            continue
+        soup = BeautifulSoup(html, "lxml")
+        count = 0
+        for a in soup.select("a[href*='/events/']"):
+            m = re.search(r"/events/(\d+)", a.get("href", ""))
+            if not m:
+                continue
+            eid = m.group(1)
+            if eid in seen_ids:
+                continue  # 跨日历/卡片与列表重复的条目
+            seen_ids.add(eid)
+            # 两种形态：横排卡片（article>h3）与省份列表行（h2）
+            h = a.select_one("h3") or a.select_one("h2")
+            if not h:
+                continue
+            name = h.get_text(strip=True)
+            div = a.select_one("div")
+            date_span = a.select_one("span")
+            venue = ""
+            race_date = ""
+            if div:
+                date_span = div.select_one("span")
+                vp = div.select_one("p")
+                venue = vp.get_text(strip=True) if vp else ""
+            if date_span:
+                race_date = date_span.get_text(strip=True)
+            if race_date and race_date < today:
+                continue  # 历史赛事跳过（黑练列表含全年+往届）
+            if not name:
+                continue
+            # 状态：优先徽章文案，无徽章的未来赛事视为待官宣
+            status = ""
+            for sp in a.select("span"):
+                t = sp.get_text(strip=True)
+                if t in HEILIAN_STATUS_MAP:
+                    status = HEILIAN_STATUS_MAP[t]
+                    break
+            if not status:
+                status = "UPCOMING"
+            leads.append({
+                "name": name,
+                "status": status,
+                "status_label": next((k for k, v in HEILIAN_STATUS_MAP.items() if v == status), "日历条目"),
+                "date_text": race_date,
+                "venue": venue,
+                "city": infer_city_from_venue(venue),
+                "category": sport_category(name),
+                "deadline_text": "",
+                "registerGuide": f"黑练赛事日历：https://heilianapp.com/events/{eid}",
+                "source": "heilianapp",
+                "sourceSheet": HEILIAN_SHEET,
+                "url": f"https://heilianapp.com/events/{eid}",
+            })
+            count += 1
+        log(f"  [黑练] {label}: 保留未来赛事 {count}（累计 {len(leads)}）")
+        time.sleep(REQUEST_INTERVAL)
+    return leads
 
 
 def collect_zuicool_nationwide() -> list[dict]:
@@ -495,6 +662,78 @@ def collect_zuicool_nationwide() -> list[dict]:
     return leads
 
 
+# ---------- 数据源 5：最酷赛事大全（zuicool.com/events，翻页全量直接入库） ----------
+
+# 大全卡片状态 → 库内状态（「点此报名」=开放报名；meta 含「已截止」=关闭；空 meta=待官宣）
+EVENTS_BTN_MAP = {"点此报名": "OPEN"}
+
+
+def collect_zuicool_events(max_pages: int = 40) -> list[dict]:
+    """最酷「赛事大全」列表（含未开报名/已截止的全部未来赛事），翻页抓取直到历史区。
+    列表按比赛日期大致降序，历史赛事深不见底——策略：只保留今天及以后开赛的卡片，
+    连续两整页全部过期即停止翻页（排序非严格单调，不能见旧即停）。"""
+    leads: list[dict] = []
+    today = time.strftime("%Y.%m.%d")
+    stale_pages = 0
+    for page in range(1, max_pages + 1):
+        html = fetch(f"https://zuicool.com/events?page={page}&per-page=100")
+        if not html:
+            break
+        soup = BeautifulSoup(html, "lxml")
+        cards = soup.select("div.event")
+        if not cards:
+            break
+        kept = 0
+        for c in cards:
+            a = c.select_one("h4.name a.event-a")
+            info_el = c.select_one(".info")
+            if not a or not info_el:
+                continue
+            name = a.get_text(strip=True)
+            info = " ".join(info_el.get_text(" ", strip=True).split())
+            dm = re.match(r"(\d{4}\.\d{2}\.\d{2})", info)
+            race_date = dm.group(1) if dm else ""
+            # 只收今天及以后开赛的赛事；日期缺失的保留（状态待核实）
+            if race_date and race_date < today:
+                continue
+            kept += 1
+            meta = c.select_one(".meta")
+            meta_text = " ".join(meta.get_text(" ", strip=True).split()) if meta else ""
+            btn = c.select_one("a.status_bth")
+            btn_text = btn.get_text(strip=True) if btn else ""
+            if btn_text in EVENTS_BTN_MAP:
+                status = EVENTS_BTN_MAP[btn_text]
+            elif "已截止" in meta_text or "已结束" in meta_text:
+                status = "CLOSED"
+            else:
+                status = "UPCOMING"  # 无按钮且无截止标记：尚未开启报名
+            deadline_text = ""
+            dmatch = re.search(r"报名截止：([\d\-]+ ?[\d:]{0,5})", meta_text)
+            if dmatch:
+                deadline_text = f"报名截止：{dmatch.group(1).strip()}"
+            leads.append({
+                "name": name,
+                "status": status,
+                "status_label": btn_text or ("已截止" if "已截止" in meta_text else "未开始"),
+                "date_text": info,  # 形如「2026.12.12 · 海南 琼海市」
+                "venue": info,       # 全文作地点原文（含省市区地标）
+                "city": infer_city_from_venue(info),
+                "category": sport_category(name),
+                "deadline_text": deadline_text,
+                "registerGuide": f"最酷赛事大全：{a.get('href', '')}",
+                "source": "zuicool_events",
+                "url": a.get("href", ""),
+            })
+        stale_pages = stale_pages + 1 if kept == 0 else 0
+        total_kept = len(leads)
+        log(f"  [zuicool 大全] 第 {page} 页：{len(cards)} 卡片，保留未来赛事 {kept}（累计 {total_kept}）")
+        if stale_pages >= 2:
+            log(f"  [zuicool 大全] 连续两整页均为历史赛事，停止翻页")
+            break
+        time.sleep(REQUEST_INTERVAL)
+    return leads
+
+
 def save_nationwide_events(leads: list[dict]) -> tuple[int, int]:
     """全国赛事直接入库 Event（城市+赛事名幂等），返回 (新增, 更新)。
     入库口径：isPublished、verifyStatus=UNVERIFIED（平台状态可信但需人工抽查）。"""
@@ -506,17 +745,29 @@ def save_nationwide_events(leads: list[dict]) -> tuple[int, int]:
         }
         inserted = updated = 0
         for e in leads:
-            race = parse_race_date_cn(e["date_text"])
-            deadline = parse_deadline_cn(e["date_text"])
+            # 日期解析：赛事大全源用点分格式；截止优先用独立 deadline_text（如「报名截止：11-06 12:00」）
+            race = parse_race_date_dot(e["date_text"])
+            deadline_text = e.get("deadline_text", "")
+            deadline = (
+                parse_deadline_md_cn(deadline_text, race)
+                if deadline_text
+                else parse_deadline_cn(e["date_text"])
+            )
             key = (e["city"], normalize_name(e["name"]))
             if key in existing_keys:
+                # 官方报名直链（最酷等）优先保留；日历聚合站（黑练）的间接链接视为低优先级，
+                # 可被后续采集到的官方直链覆盖
                 cur.execute(
                     "UPDATE Event SET name=?, category=?, raceDateText=?, raceDateStart=?, raceDateEnd=?,"
-                    " venue=?, status=?, deadlineAt=?, registerGuide=?, registerUrl=?,"
+                    " venue=?, status=?, deadlineText=?, deadlineAt=?,"
+                    " registerGuide=CASE WHEN registerUrl!='' AND registerUrl NOT LIKE '%heilianapp.com%'"
+                    "  THEN registerGuide ELSE ? END,"
+                    " registerUrl=CASE WHEN registerUrl!='' AND registerUrl NOT LIKE '%heilianapp.com%'"
+                    "  THEN registerUrl ELSE ? END,"
                     " updatedAt=datetime('now')"
                     " WHERE city=? AND name=?",
-                    (e["name"], e["category"], e["date_text"] or "时间待定", race, deadline,
-                     e["venue"], e["status"], deadline, e["registerGuide"], e["url"],
+                    (e["name"], e["category"], e["date_text"] or "时间待定", race, race,
+                     e["venue"], e["status"], deadline_text, deadline, e["registerGuide"], e["url"],
                      e["city"], e["name"]),
                 )
                 updated += 1
@@ -526,13 +777,13 @@ def save_nationwide_events(leads: list[dict]) -> tuple[int, int]:
                     " raceDateEnd, venue, status, deadlineText, deadlineAt, registerGuide, registerUrl,"
                     " verifyStatus, verifiedAt, kind, dataOrigin, sourceName, sourceSheet, isPublished,"
                     " createdAt, updatedAt)"
-                    " VALUES (?, ?, ?, '', ?, '[]', ?, ?, ?, ?, ?, '', ?, ?, ?, 'UNVERIFIED', NULL,"
+                    " VALUES (?, ?, ?, '', ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNVERIFIED', NULL,"
                     " 'PARTICIPATABLE', 'MANUAL_COLLECTION', ?, ?, 1, datetime('now'), datetime('now'))",
                     (
                         uuid.uuid4().hex, e["name"], e["city"], e["category"],
-                        e["date_text"] or "时间待定", race, deadline,
-                        e["venue"], e["status"], deadline, e["registerGuide"], e["url"],
-                        e["source"], NATIONWIDE_SHEET,
+                        e["date_text"] or "时间待定", race, race,
+                        e["venue"], e["status"], deadline_text, deadline, e["registerGuide"], e["url"],
+                        e["source"], e.get("sourceSheet", NATIONWIDE_SHEET),
                     ),
                 )
                 inserted += 1
@@ -601,7 +852,7 @@ def save_leads(leads: list[dict], existing_names: set[str], existing_urls: set[s
 def main() -> None:
     parser = argparse.ArgumentParser(description="赛事线索采集器")
     parser.add_argument("--city", help="只采集指定城市")
-    parser.add_argument("--source", default="zuicool", help="数据源：zuicool / sogou / rss / nationwide / all（默认 zuicool）")
+    parser.add_argument("--source", default="zuicool", help="数据源：zuicool / sogou / rss / nationwide / events / heilian / all（默认 zuicool）")
     parser.add_argument("--rotate", type=int, default=0, help="分城轮转组数（如 5 = 每天采 1/5 的城市），仅作用于搜狗等风控敏感源")
     args = parser.parse_args()
 
@@ -631,6 +882,20 @@ def main() -> None:
         ins, upd = save_nationwide_events(events)
         log(f"[全国模式] 入库完成：新增赛事 {ins}，更新 {upd}")
         print("\n全国赛事已入库（isPublished，待人工抽查），前台刷新即可见。")
+
+    if "events" in sources:
+        log("\n[赛事大全] 翻页抓取最酷赛事大全（含未开报名的未来赛事）并直接入库…")
+        events = collect_zuicool_events()
+        ins, upd = save_nationwide_events(events)
+        log(f"[赛事大全] 入库完成：新增赛事 {ins}，更新 {upd}")
+        print("\n赛事大全已入库（isPublished），前台刷新即可见。")
+
+    if "heilian" in sources:
+        log("\n[黑练] 抓取黑练四品类赛事日历并直接入库…")
+        events = collect_heilian()
+        ins, upd = save_nationwide_events(events)
+        log(f"[黑练] 入库完成：新增赛事 {ins}，更新 {upd}")
+        print("\n黑练日历已入库（isPublished），前台刷新即可见。")
 
     log("请到后台 /admin/submissions 核对「采集线索」，确认后正式录入赛事。")
     sys.exit(0)
