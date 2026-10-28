@@ -16,6 +16,7 @@
     "seed:wuxi": "tsx scripts/seed-wuxi.ts",
     "seed:ningbo": "tsx scripts/seed-ningbo.ts",
     "seed:beijing": "tsx scripts/seed-beijing.ts",
+    "seed:national": "tsx scripts/seed-national.ts",
     "seed:cities": "tsx scripts/seed-cities.ts"
   },
   "dependencies": {
