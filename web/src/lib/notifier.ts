@@ -210,8 +210,9 @@ async function scanEventOpen(summary: NotifySummary): Promise<void> {
 /** 城市×品类新赛提醒：上次水位之后新入库的已发布赛事 */
 async function scanNewEvents(summary: NotifySummary): Promise<void> {
   const now = Date.now();
+  // city 为 null 的订阅是「全国/全站新赛」订阅：不限城市，仅按品类过滤
   const subs = await prisma.subscription.findMany({
-    where: { type: 'CITY_CATEGORY_NEW', confirmed: true, city: { not: null } },
+    where: { type: 'CITY_CATEGORY_NEW', confirmed: true },
   });
 
   for (const sub of subs) {
@@ -231,7 +232,7 @@ async function scanNewEvents(summary: NotifySummary): Promise<void> {
 
     await safeSend(
       buildNewEventMail({
-        city: sub.city ?? '',
+        city: sub.city ?? '全国',
         category: sub.category ?? '全部品类',
         events: events.map((e) => ({
           id: e.id,

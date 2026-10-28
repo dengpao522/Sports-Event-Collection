@@ -9,8 +9,22 @@ export const dynamic = 'force-dynamic';
 const EVENT_TYPES = ['EVENT_OPEN', 'DEADLINE_24H', 'DEADLINE_72H', 'NEXT_YEAR'];
 const ALLOWED_TYPES = [...EVENT_TYPES, 'CITY_CATEGORY_NEW', 'CITY_LAUNCH'];
 // 城市/品类白名单：这两个值会拼进邮件 HTML，必须是枚举值防注入（安全修复 CWE-96）
-const ALLOWED_CITIES: string[] = [...CITIES, ...SOON_CITIES];
+const STATIC_ALLOWED_CITIES: string[] = [...CITIES, ...SOON_CITIES];
 const ALLOWED_CATEGORY_KEYS: string[] = CATEGORIES.map((c) => c.key);
+
+/**
+ * 城市白名单 = 静态枚举 ∪ 库内已发布赛事的城市动态集。
+ * 全国化后库内新增了大量采集城市（如莆田/黔东南/慈溪）与省域/「全国」维度，
+ * 静态枚举覆盖不全，动态并集保证已开通城市均可订阅。
+ */
+async function loadAllowedCities(): Promise<Set<string>> {
+  const rows = await prisma.event.findMany({
+    where: { isPublished: true },
+    distinct: ['city'],
+    select: { city: true },
+  });
+  return new Set([...STATIC_ALLOWED_CITIES, ...rows.map((r) => r.city)]);
+}
 
 /** 创建订阅（P0 免注册，提交后发确认邮件，双重确认） */
 export async function POST(req: Request) {
@@ -41,11 +55,10 @@ export async function POST(req: Request) {
   if (EVENT_TYPES.includes(type) && !eventId) {
     return NextResponse.json({ error: '缺少赛事标识' }, { status: 400 });
   }
-  if (type === 'CITY_CATEGORY_NEW' && !city) {
-    return NextResponse.json({ error: '缺少城市' }, { status: 400 });
-  }
+  // CITY_CATEGORY_NEW 的 city 允许缺省（null = 全国/全站新赛订阅），品类同理
   // 城市/品类白名单：拦截枚举外的任意文本（否则会被拼进邮件 HTML）
-  if (city && !ALLOWED_CITIES.includes(city as (typeof ALLOWED_CITIES)[number])) {
+  const allowedCities = await loadAllowedCities();
+  if (city && !allowedCities.has(city)) {
     return NextResponse.json({ error: '城市暂未开通' }, { status: 400 });
   }
   if (category && !ALLOWED_CATEGORY_KEYS.includes(category)) {
@@ -87,7 +100,7 @@ export async function POST(req: Request) {
     const site = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
     const topic = eventName
       ? `赛事「${eventName}」`
-      : `${city}${category ? ' · ' + category : ''} 有新赛事`;
+      : `${city ?? '全国'}${category ? ' · ' + category : ''} 有新赛事`;
     const mail = buildConfirmMail({
       eventName,
       topic,
