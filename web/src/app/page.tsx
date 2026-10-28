@@ -59,7 +59,7 @@ export default async function HomePage() {
             报名与支付均在官方渠道完成，本站不经手任何费用。
           </p>
           <div className="mt-4 flex gap-5 text-sm font-semibold text-brand-700">
-            <span>{cityCount} 个城市</span>
+            <span>{cityCount} 个城市/地区</span>
             <span>{events.length} 场赛事收录</span>
             <span>{openCount} 场正在报名</span>
           </div>

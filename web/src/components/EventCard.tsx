@@ -36,7 +36,9 @@ export function EventCard({ ev }: { ev: EventCardData }) {
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-gray-500">
         <span>📅 {ev.raceDateText}</span>
-        {ev.venue && <span>📍 {ev.venue}</span>}
+        {/* 全国化后列表混合多城市/省域/全国性赛事，城市是必要定位信息 */}
+        <span>📍 {ev.city}</span>
+        {ev.venue && <span>🏃 {ev.venue}</span>}
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
