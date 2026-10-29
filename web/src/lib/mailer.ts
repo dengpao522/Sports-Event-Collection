@@ -10,6 +10,7 @@
  * 防呆：provider=resend 但未配置密钥时自动降级为 mock 并告警，
  * 避免提醒任务在未配置完成时整批失败。
  */
+import { escapeHtml } from './escape-html';
 
 export interface MailPayload {
   to: string;
@@ -93,7 +94,8 @@ export function buildConfirmMail(opts: {
   confirmUrl: string;
 }): MailPayload {
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
-  const what = opts.eventName ? `赛事「${opts.eventName}」` : opts.topic;
+  // escapeHtml：eventName/topic 拼入 HTML 正文，防止数据文本注入标签/属性（CWE-79）
+  const what = opts.eventName ? `赛事「${escapeHtml(opts.eventName)}」` : escapeHtml(opts.topic);
   return {
     to: '', // 由调用方填
     subject: `【全民运动】确认订阅${opts.eventName ? '：' + opts.eventName : ''}`,

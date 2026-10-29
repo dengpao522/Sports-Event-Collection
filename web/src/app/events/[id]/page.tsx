@@ -58,7 +58,14 @@ export default async function EventDetailPage({
     },
   };
 
-  const tags: string[] = JSON.parse(ev.tags || '[]');
+  // 容错解析项目标签：历史/异常数据 tags 非法 JSON 时降级为无标签，避免详情页 500
+  let tags: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(ev.tags || '[]');
+    if (Array.isArray(parsed)) tags = parsed.map(String);
+  } catch {
+    // 非法 JSON → 视为无标签
+  }
   const isRegisterable =
     ev.kind === 'PARTICIPATABLE' && ['OPEN', 'FIRST_COME', 'UPCOMING'].includes(ev.status);
   // 报名进行/即将开启但未采集到直链：引导按“报名方式”中的官方渠道操作，而非误报已结束

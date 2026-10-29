@@ -12,7 +12,7 @@ import { prisma } from '@/lib/prisma';
 import { ADMIN_COOKIE, requireAdmin, sessionTokenFor } from '@/lib/auth';
 import { parseDeadline, parseRaceDate } from '@/lib/parse-date';
 import { importWorkbook } from '@/lib/import-events';
-import { CATEGORIES, CITIES } from '@/lib/constants';
+import { CATEGORIES, CITIES, EVENT_KIND, REG_STATUS } from '@/lib/constants';
 
 /** 登录：校验 ADMIN_PASSWORD，写 7 天会话 Cookie */
 export async function loginAction(formData: FormData) {
@@ -70,14 +70,29 @@ export async function saveEventAction(formData: FormData) {
       .filter(Boolean)
   );
 
+  // 报名直链仅接受 http(s) 协议：该值会渲染为详情页 <a href> 并拼入提醒邮件 HTML，
+  // 放行 javascript:/data: 等危险 scheme 会形成存储型 XSS
+  const registerUrl = String(formData.get('registerUrl') ?? '').trim();
+  if (registerUrl && !/^https?:\/\//i.test(registerUrl)) {
+    redirect(`${back}?error=${encodeURIComponent('报名链接必须以 http:// 或 https:// 开头')}`);
+  }
+
+  // 枚举白名单校验：防止异常提交写入未知状态，导致前台状态机/徽章展示错乱
+  const kind = String(formData.get('kind') ?? 'PARTICIPATABLE');
+  const status = String(formData.get('status') ?? 'UNVERIFIED');
+  const verifyStatus = String(formData.get('verifyStatus') ?? 'UNVERIFIED');
+  if (!(kind in EVENT_KIND) || !(status in REG_STATUS) || !['VERIFIED', 'UNVERIFIED'].includes(verifyStatus)) {
+    redirect(`${back}?error=${encodeURIComponent('赛事性质或状态取值不合法')}`);
+  }
+
   const data = {
     name,
     city,
     category,
     tags,
-    kind: String(formData.get('kind') ?? 'PARTICIPATABLE'),
-    status: String(formData.get('status') ?? 'UNVERIFIED'),
-    verifyStatus: String(formData.get('verifyStatus') ?? 'UNVERIFIED'),
+    kind,
+    status,
+    verifyStatus,
     raceDateText,
     raceDateStart: race.start,
     raceDateEnd: race.end,
@@ -85,7 +100,7 @@ export async function saveEventAction(formData: FormData) {
     deadlineAt: deadline,
     venue: String(formData.get('venue') ?? '').trim(),
     registerGuide: String(formData.get('registerGuide') ?? '').trim(),
-    registerUrl: String(formData.get('registerUrl') ?? '').trim(),
+    registerUrl,
     isPublished: formData.get('isPublished') === 'on',
   };
 

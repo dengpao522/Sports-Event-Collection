@@ -33,13 +33,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '描述请控制在 1000 字以内' }, { status: 400 });
   }
   const contact = (body.contact ?? '').trim().slice(0, 100);
+  // city/category/eventId 同样限制长度，与 content/contact 一致，防异常超长文本污染入库
+  const city = (body.city ?? '').trim().slice(0, 50);
+  const category = (body.category ?? '').trim().slice(0, 50);
+  const eventId = body.eventId ? String(body.eventId).trim().slice(0, 64) : null;
 
   await prisma.submission.create({
     data: {
       type,
-      city: (body.city ?? '').trim(),
-      category: (body.category ?? '').trim(),
-      eventId: body.eventId || null,
+      city,
+      category,
+      eventId,
       content,
       contact,
       status: 'PENDING',

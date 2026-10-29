@@ -18,6 +18,7 @@
  */
 import { prisma } from './prisma';
 import { sendMail, type MailPayload } from './mailer';
+import { escapeHtml } from './escape-html';
 
 const HOUR = 3600_000;
 
@@ -46,10 +47,13 @@ function footer(unsubscribeToken: string): string {
 
 /** 报名按钮（有直链才展示） */
 function registerButton(registerUrl: string, eventId: string): string {
-  const href = registerUrl || `${site()}/events/${eventId}`;
-  const label = registerUrl ? '前往官方报名 ↗' : '查看赛事详情';
+  // 防注入：报名直链仅接受 http(s) 协议，其他 scheme（javascript:/data: 等）一律降级为站内详情页
+  const trusted = /^https?:\/\//i.test(registerUrl);
+  const href = trusted ? registerUrl : `${site()}/events/${eventId}`;
+  const label = trusted ? '前往官方报名 ↗' : '查看赛事详情';
+  // escapeHtml 防 href 属性逃逸（双引号闭合攻击）
   return (
-    `<p style="margin-top:16px"><a href="${href}" ` +
+    `<p style="margin-top:16px"><a href="${escapeHtml(href)}" ` +
     `style="background:#f97316;color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none">${label}</a></p>`
   );
 }
@@ -77,7 +81,7 @@ function buildDeadlineMail(opts: {
       `想参加的话请尽快在官方渠道完成报名：\n${opts.registerUrl || `${site()}/events/${opts.eventId}`}\n\n` +
       `报名与支付均在官方渠道完成，本站不经手任何费用。\n— 全民运动`,
     html:
-      `<p>你好，</p><p>你订阅的赛事 <b>「${opts.eventName}」</b> 将于 <b>${dl}</b> 截止报名，剩余约 <b style="color:#ea580c">${left}</b>。</p>` +
+      `<p>你好，</p><p>你订阅的赛事 <b>「${escapeHtml(opts.eventName)}」</b> 将于 <b>${dl}</b> 截止报名，剩余约 <b style="color:#ea580c">${left}</b>。</p>` +
       `<p>想参加的话请尽快完成报名：</p>` +
       registerButton(opts.registerUrl, opts.eventId) +
       footer(opts.unsubscribeToken),
@@ -98,7 +102,7 @@ function buildOpenMail(opts: {
       `你好，\n\n你等待的赛事「${opts.eventName}」现已开放报名！\n` +
       `报名入口：\n${opts.registerUrl || `${site()}/events/${opts.eventId}`}\n\n— 全民运动`,
     html:
-      `<p>你好，</p><p>你等待的赛事 <b>「${opts.eventName}」</b> 现已开放报名 🎉</p>` +
+      `<p>你好，</p><p>你等待的赛事 <b>「${escapeHtml(opts.eventName)}」</b> 现已开放报名 🎉</p>` +
       registerButton(opts.registerUrl, opts.eventId) +
       footer(opts.unsubscribeToken),
   };
@@ -114,7 +118,7 @@ function buildNewEventMail(opts: {
   const rows = opts.events
     .map(
       (e) =>
-        `<li><b>${e.name}</b>（${e.raceDateText || '日期待官宣'} · ${e.statusLabel}）` +
+        `<li><b>${escapeHtml(e.name)}</b>（${escapeHtml(e.raceDateText || '日期待官宣')} · ${escapeHtml(e.statusLabel)}）` +
         ` <a href="${site()}/events/${e.id}">详情 ↗</a></li>`
     )
     .join('');
@@ -127,7 +131,7 @@ function buildNewEventMail(opts: {
     text:
       `你好，\n\n你订阅的「${opts.city} · ${opts.category}」有新的赛事上架：\n\n${textRows}\n\n— 全民运动`,
     html:
-      `<p>你好，</p><p>你订阅的 <b>${opts.city} · ${opts.category}</b> 有 <b>${opts.events.length}</b> 场新赛事上架：</p>` +
+      `<p>你好，</p><p>你订阅的 <b>${escapeHtml(opts.city)} · ${escapeHtml(opts.category)}</b> 有 <b>${opts.events.length}</b> 场新赛事上架：</p>` +
       `<ul style="padding-left:20px;line-height:1.9">${rows}</ul>` +
       footer(opts.unsubscribeToken),
   };
