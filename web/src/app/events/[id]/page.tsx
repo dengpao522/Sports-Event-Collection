@@ -5,6 +5,7 @@ import { getEventById, parseTags } from '@/lib/events';
 import { StatusBadge } from '@/components/StatusBadge';
 import { StatusTimeline } from '@/components/StatusTimeline';
 import { EventSubscribe } from '@/components/EventSubscribe';
+import { CopyGuide } from '@/components/CopyGuide';
 import { EVENT_KIND } from '@/lib/constants';
 import { SITE_URL } from '@/lib/site';
 
@@ -146,15 +147,31 @@ export default async function EventDetailPage({
           >
             前往官方报名 ↗
           </a>
+        ) : ev.kind === 'VIEWING' ? (
+          <div className="rounded-xl bg-gray-50 py-3 text-center text-sm text-gray-500">
+            该赛事为观赛内容，请通过官方票务渠道购票
+          </div>
+        ) : isRegisterable ? (
+          /* 无直链但可报名（约占可报名赛事三成）：展示官方渠道引导卡片 + 一键复制，
+             替代原来"没得点"的灰字提示，降低用户流失 */
+          ev.registerGuide ? (
+            <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-4">
+              <p className="text-sm font-semibold text-gray-900">按官方渠道报名</p>
+              <p className="mt-1.5 text-sm leading-6 text-gray-700">{ev.registerGuide}</p>
+              <CopyGuide text={ev.registerGuide} />
+            </div>
+          ) : (
+            <div className="rounded-xl bg-gray-50 py-3 text-center text-sm text-gray-500">
+              报名渠道暂未公布，订阅后开报即通知
+            </div>
+          )
+        ) : ev.status === 'PENDING_ANNOUNCEMENT' || ev.status === 'UNVERIFIED' ? (
+          <div className="rounded-xl bg-gray-50 py-3 text-center text-sm text-gray-500">
+            报名尚未开启或信息待核实，订阅后开报即通知
+          </div>
         ) : (
           <div className="rounded-xl bg-gray-50 py-3 text-center text-sm text-gray-500">
-            {ev.kind === 'VIEWING'
-              ? '该赛事为观赛内容，请通过官方票务渠道购票'
-              : ev.status === 'PENDING_ANNOUNCEMENT' || ev.status === 'UNVERIFIED'
-                ? '报名尚未开启或信息待核实，订阅后开报即通知'
-                : isRegisterable
-                  ? '该赛事暂未采集到直达报名链接，请按上方“报名方式”中的官方渠道（小程序/公众号/官网）报名'
-                  : '报名已结束，可关注下一届'}
+            报名已结束，可关注下一届
           </div>
         )}
         <div className="mt-3">
