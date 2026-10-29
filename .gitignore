@@ -42,3 +42,7 @@ crawler/.verify_fails.json
 
 # ===== Trae / IDE 分享临时包 =====
 .trae-html-share-packages/
+
+# ===== 运营工作文件（本地核补用，不入库）=====
+# export-no-url-leads.ts 导出的无直链赛事补链清单
+补采线索-无直链赛事.csv
