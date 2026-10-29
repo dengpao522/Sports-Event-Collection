@@ -15,7 +15,8 @@ export function SiteFooter() {
               href={`/city/${encodeURIComponent(c)}`}
               className="mr-3 text-brand-600 hover:underline"
             >
-              {c}运动赛事
+                {/* 只展示城市名，链接文字保持简洁（SEO 内链不变） */}
+              {c}
             </Link>
           ))}
         </nav>

@@ -52,7 +52,6 @@ export default async function HomePage() {
           <p className="mt-2 max-w-2xl text-sm leading-7 text-gray-600">
             我们把全国大众可报名的运动赛事聚到一处，按城市和运动品类筛选，
             报名开启与截止前邮件提醒你，不再错过报名窗口。
-            数据每日自动采集并核验，失效赛事自动下架。
           </p>
           {/* 信任补丁（P1）：个人站必须第一时间讲清「不经手报名与费用」 */}
           <p className="mt-2 max-w-2xl text-sm font-medium text-gray-700">

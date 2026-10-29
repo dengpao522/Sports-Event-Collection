@@ -97,6 +97,17 @@ export default async function EventDetailPage({
           <span className="rounded-full bg-white px-2.5 py-0.5 text-xs text-gray-600 border border-gray-200">
             {ev.city} · {ev.category}
           </span>
+          {/* 可信度徽章（原「信息来源」行简化而来）：只展示核实状态，不暴露采集渠道细节 */}
+          {ev.verifyStatus === 'VERIFIED' ? (
+            <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-xs text-blue-600">
+              ✓ 官方已核实
+              {ev.verifiedAt ? ` · ${ev.verifiedAt.toISOString().slice(0, 10)}` : ''}
+            </span>
+          ) : (
+            <span className="rounded-full border border-amber-100 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-600">
+              ● 信息待核实
+            </span>
+          )}
         </div>
         <h1 className="mt-3 text-xl font-extrabold leading-snug text-gray-900">{ev.name}</h1>
       </div>
@@ -121,14 +132,6 @@ export default async function EventDetailPage({
           </Row>
         )}
         {ev.registerGuide && <Row label="报名方式">{ev.registerGuide}</Row>}
-        <Row label="信息来源">
-          {ev.sourceName || '运营采集自公开渠道'}
-          {ev.verifyStatus === 'VERIFIED' ? (
-            <span className="ml-2 text-blue-600">✓ 官方已核实{ev.verifiedAt ? ` · ${ev.verifiedAt.toISOString().slice(0, 10)}` : ''}</span>
-          ) : (
-            <span className="ml-2 text-amber-600">● 信息待核实，以官方为准</span>
-          )}
-        </Row>
       </div>
 
       {/* 操作区 */}
@@ -138,6 +141,7 @@ export default async function EventDetailPage({
             href={ev.registerUrl}
             target="_blank"
             rel="noopener noreferrer"
+            referrerPolicy="no-referrer"
             className="block w-full rounded-xl bg-brand-500 py-3 text-center text-sm font-bold text-white hover:bg-brand-600"
           >
             前往官方报名 ↗

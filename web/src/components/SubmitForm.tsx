@@ -152,7 +152,7 @@ export function SubmitForm({
         <input
           value={contact}
           onChange={(e) => setContact(e.target.value)}
-          placeholder="微信 / 邮箱，留空也可以"
+          placeholder="手机号 / 微信 / 邮箱，留空也可以"
           className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-500"
         />
       </label>
