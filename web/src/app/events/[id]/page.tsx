@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getEventById } from '@/lib/events';
+import { getEventById, parseTags } from '@/lib/events';
 import { StatusBadge } from '@/components/StatusBadge';
 import { StatusTimeline } from '@/components/StatusTimeline';
 import { EventSubscribe } from '@/components/EventSubscribe';
@@ -58,14 +58,8 @@ export default async function EventDetailPage({
     },
   };
 
-  // 容错解析项目标签：历史/异常数据 tags 非法 JSON 时降级为无标签，避免详情页 500
-  let tags: string[] = [];
-  try {
-    const parsed: unknown = JSON.parse(ev.tags || '[]');
-    if (Array.isArray(parsed)) tags = parsed.map(String);
-  } catch {
-    // 非法 JSON → 视为无标签
-  }
+  // 容错解析项目标签：tags 存脏数据（非法 JSON）时降级为无标签（公共 helper，与列表页一致）
+  const tags = parseTags(ev.tags);
   const isRegisterable =
     ev.kind === 'PARTICIPATABLE' && ['OPEN', 'FIRST_COME', 'UPCOMING'].includes(ev.status);
   // 报名进行/即将开启但未采集到直链：引导按“报名方式”中的官方渠道操作，而非误报已结束
@@ -73,7 +67,12 @@ export default async function EventDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {/* JSON-LD 防注入：赛事名/地点来自爬虫与导入数据，可能含 </script> 提前闭合标签造成
+          存储型 XSS；将所有 < 转义为 \u003c（JSON 合法转义，浏览器/爬虫解析结果不变） */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
+      />
 
       <Link href="/" className="text-sm text-gray-500 hover:text-brand-600">
         ← 返回赛事列表

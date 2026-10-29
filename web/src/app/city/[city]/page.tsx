@@ -6,7 +6,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getPublishedEvents } from '@/lib/events';
+import { getPublishedEvents, parseTags } from '@/lib/events';
 import { EventCard, type EventCardData } from '@/components/EventCard';
 import { SITE_URL, SITE_NAME } from '@/lib/site';
 
@@ -19,7 +19,8 @@ function toCardData(e: Awaited<ReturnType<typeof getPublishedEvents>>[number]): 
     name: e.name,
     city: e.city,
     category: e.category,
-    tags: JSON.parse(e.tags) as string[],
+    // parseTags 容错解析：tags 存脏数据（非法 JSON）时不至于整页 500
+    tags: parseTags(e.tags),
     status: e.status,
     kind: e.kind,
     verifyStatus: e.verifyStatus,
@@ -100,7 +101,12 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {/* JSON-LD 防注入：赛事名/地点来自爬虫与导入数据，可能含 </script> 提前闭合标签造成
+          存储型 XSS；将所有 < 转义为 \u003c（JSON 合法转义，浏览器/爬虫解析结果不变） */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
+      />
 
       <nav className="text-sm text-gray-400">
         <Link href="/" className="hover:text-brand-600">

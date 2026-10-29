@@ -54,3 +54,18 @@ export async function getGapReason(city: string, category: string) {
 export async function getEventById(id: string) {
   return prisma.event.findUnique({ where: { id } });
 }
+
+/**
+ * 容错解析赛事标签 JSON：库内 tags 为 JSON 字符串，历史/爬虫异常数据可能是非法 JSON
+ * 或非数组结构，直接 JSON.parse 会抛错导致整页 500。此处统一降级为空数组。
+ * 列表页/详情页等多处复用，避免各页重复 try/catch。
+ */
+export function parseTags(raw: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    // 非法 JSON 或非数组 → 视为无标签
+    return [];
+  }
+}
